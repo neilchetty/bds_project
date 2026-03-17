@@ -10,6 +10,7 @@ public final class TestMain {
         new MetricsTests().run();
         new DaxLoaderTests().run();
         new TrainingProfileCsvTests().run();
+        new WorkflowDataSummaryTests().run();
         System.out.println("All Java scheduler tests passed.");
     }
 }

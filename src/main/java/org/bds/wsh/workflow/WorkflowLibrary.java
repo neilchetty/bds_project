@@ -12,8 +12,22 @@ import org.bds.wsh.model.Workflow;
 
 /**
  * Built-in workflow definitions with big-data-scale edge data.
- * Edge data sizes represent production bioinformatics workloads
+ * Edge data sizes represent production bioinformatics and scientific workloads
  * where significant data is transferred between pipeline stages.
+ *
+ * <p><b>Where is the big data?</b><br>
+ * Every workflow here transfers data between tasks at a scale typical of
+ * real scientific pipelines:
+ * <ul>
+ *   <li>{@link #gene2life()} — genomics pipeline: ~150 MB total edge data</li>
+ *   <li>{@link #avianfluSmall()} — molecular docking: ~20 GB total edge data</li>
+ *   <li>{@link #epigenomics()} — epigenomic analysis: multi-GB total edge data</li>
+ *   <li>{@link #cyberShake()} — seismic hazard analysis: ~1 TB total edge data
+ *       (1 000 tasks, representative of production CyberShake runs on national
+ *       HPC facilities)</li>
+ * </ul>
+ * Use the {@code workflow-info} CLI command to print a full data-volume summary
+ * for every workflow.
  */
 public final class WorkflowLibrary {
     private WorkflowLibrary() {
@@ -56,8 +70,77 @@ public final class WorkflowLibrary {
         return layeredWorkflow("Epigenomics", 100, 2026L, 5, 12, 25.0, 240.0, 0.15, 0.60);
     }
 
+    /**
+     * CyberShake seismic-hazard analysis workflow (1 000 tasks).
+     *
+     * <p>Models a production CyberShake run on a national HPC facility.
+     * The pipeline performs seismic wave propagation simulations for thousands
+     * of rupture scenarios and aggregates them into a probabilistic hazard
+     * curve.  Structured as three stages:
+     * <ol>
+     *   <li><b>PreProcess</b> — 50 parallel tasks that read large velocity
+     *       models and seismic station metadata (~2 GB/task input).</li>
+     *   <li><b>Simulate</b> — 900 CPU-intensive wave-propagation simulations,
+     *       each consuming the pre-processed velocity model and outputting a
+     *       synthetic seismogram file (~1 GB/task output).</li>
+     *   <li><b>PostProcess</b> — 50 tasks that merge seismograms from the
+     *       simulation stage into site-specific hazard curves.</li>
+     * </ol>
+     * Total simulated data volume: &gt; 1 TB, making this a textbook Big Data
+     * scientific workflow.
+     */
+    public static Workflow cyberShake() {
+        final int preCount = 50;
+        final int simCount = 900;
+        final int postCount = 50;
+
+        List<Task> tasks = new ArrayList<>();
+
+        // Stage 1: PreProcess tasks — read large velocity-model files.
+        for (int i = 1; i <= preCount; i++) {
+            String id = String.format("PreProcess_%03d", i);
+            // 2 GB input per task, ~120 s CPU (velocity-model parsing).
+            tasks.add(task(id, 120.0, 2.0 * GB, List.of(), Map.of()));
+        }
+
+        // Stage 2: Simulate — 900 wave-propagation jobs, each depending on
+        // one pre-process task (round-robin assignment).
+        for (int i = 1; i <= simCount; i++) {
+            String id = String.format("Simulate_%04d", i);
+            String predecessor = String.format("PreProcess_%03d", ((i - 1) % preCount) + 1);
+            // Each job reads ~2 GB velocity model + outputs ~1 GB seismogram.
+            tasks.add(task(id, 3600.0, 1.0 * GB, List.of(predecessor),
+                    Map.of(predecessor, 2.0 * GB)));
+        }
+
+        // Stage 3: PostProcess — aggregate seismograms into hazard curves.
+        // Each post-process task consumes the output of 18 simulation tasks.
+        for (int i = 1; i <= postCount; i++) {
+            String id = String.format("PostProcess_%03d", i);
+            List<String> predecessors = new ArrayList<>();
+            Map<String, Double> edgeData = new LinkedHashMap<>();
+            int base = (i - 1) * (simCount / postCount);
+            for (int j = 1; j <= simCount / postCount; j++) {
+                String simId = String.format("Simulate_%04d", base + j);
+                predecessors.add(simId);
+                edgeData.put(simId, 1.0 * GB);
+            }
+            tasks.add(task(id, 600.0, (double) (simCount / postCount) * GB, predecessors, edgeData));
+        }
+
+        return new Workflow("CyberShake", tasks);
+    }
+
     public static List<Workflow> defaultWorkflows() {
         return List.of(gene2life(), avianfluSmall(), epigenomics());
+    }
+
+    /**
+     * Returns all workflows including the large-scale {@link #cyberShake()} workflow.
+     * This is the full set that demonstrates the project's big-data capabilities.
+     */
+    public static List<Workflow> allWorkflows() {
+        return List.of(gene2life(), avianfluSmall(), epigenomics(), cyberShake());
     }
 
     private static Workflow layeredWorkflow(
@@ -125,4 +208,5 @@ public final class WorkflowLibrary {
 
     private static final double KB = 1024.0;
     private static final double MB = 1024.0 * 1024.0;
+    private static final double GB = 1024.0 * MB;
 }

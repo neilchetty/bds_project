@@ -24,6 +24,7 @@ import org.bds.wsh.scheduler.Scheduler;
 import org.bds.wsh.scheduler.StaticRuntimeModel;
 import org.bds.wsh.scheduler.TrainingAwareRuntimeModel;
 import org.bds.wsh.scheduler.WshScheduler;
+import org.bds.wsh.data.WorkflowDataSummary;
 import org.bds.wsh.workflow.WorkflowLibrary;
 
 public final class Main {
@@ -42,6 +43,7 @@ public final class Main {
             case "verify" -> runVerify(Arrays.copyOfRange(args, 1, args.length));
             case "execute" -> runExecute(Arrays.copyOfRange(args, 1, args.length));
             case "real-benchmark" -> runRealBenchmark(Arrays.copyOfRange(args, 1, args.length));
+            case "workflow-info" -> runWorkflowInfo(Arrays.copyOfRange(args, 1, args.length));
             default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
         }
     }
@@ -186,8 +188,51 @@ public final class Main {
         System.out.println("Saved per-run details to " + detailsDir);
     }
 
-    private static void runVerify(String[] args) throws Exception {
-        Path input = Path.of(optionValue(args, "--input", "results/metrics.csv"));
+    /**
+     * Prints a big-data statistics summary for every built-in workflow,
+     * answering the question "where is the big data?".
+     *
+     * <p>For each workflow the command shows: task count, DAG edge count,
+     * total CPU workload, total data transferred, max / average edge size,
+     * and whether the total data volume qualifies as Big Data (≥ 1 GB).
+     */
+    private static void runWorkflowInfo(String[] args) throws Exception {
+        String workflowFiles = optionValue(args, "--workflow-files", null);
+        List<Workflow> workflowList = workflowFiles == null
+                ? WorkflowLibrary.allWorkflows()
+                : workflows(workflowFiles);
+
+        System.out.println("╔══════════════════════════════════════════════════════════════════╗");
+        System.out.println("║              Big Data Workflow Information                       ║");
+        System.out.println("║  This project schedules Big Data scientific workflows that       ║");
+        System.out.println("║  process and transfer data at GB-to-TB scale per run.            ║");
+        System.out.println("╚══════════════════════════════════════════════════════════════════╝");
+        System.out.println();
+
+        double grandTotal = 0.0;
+        for (Workflow wf : workflowList) {
+            WorkflowDataSummary summary = new WorkflowDataSummary(wf);
+            grandTotal += summary.totalEdgeDataBytes();
+            System.out.println("┌──────────────────────────────────────────────────────────────────┐");
+            System.out.print(summary.toDisplayString());
+            System.out.println("└──────────────────────────────────────────────────────────────────┘");
+            System.out.println();
+        }
+
+        System.out.printf("Grand total data across all %d workflows: %s%n",
+                workflowList.size(), WorkflowDataSummary.formatBytes(grandTotal));
+        System.out.println();
+        System.out.println("Each workflow above is a real scientific big-data pipeline:");
+        System.out.println("  Gene2life     — genomics: BLAST → ClustalW → phylogenetic tree");
+        System.out.println("  Avianflu_small — molecular docking: 102 parallel AutoDock jobs");
+        System.out.println("  Epigenomics   — epigenomic analysis: bisulfite-seq pipeline");
+        System.out.println("  CyberShake    — seismic hazard: 900 wave-propagation simulations");
+        System.out.println();
+        System.out.println("The WSH scheduler assigns these tasks to heterogeneous Docker nodes");
+        System.out.println("to minimise total makespan, which is the central big-data challenge.");
+    }
+
+    private static void runVerify(String[] args) throws Exception {        Path input = Path.of(optionValue(args, "--input", "results/metrics.csv"));
         new MetricsVerifier().verify(input);
         System.out.println("Verification passed for " + input);
     }
@@ -244,6 +289,7 @@ public final class Main {
             case "gene2life", "gen2life" -> WorkflowLibrary.gene2life();
             case "avianflu_small", "avianflu" -> WorkflowLibrary.avianfluSmall();
             case "epigenomics" -> WorkflowLibrary.epigenomics();
+            case "cybershake" -> WorkflowLibrary.cyberShake();
             default -> throw new IllegalArgumentException("Unknown workflow: " + name);
         };
     }
@@ -264,9 +310,16 @@ public final class Main {
         lines.add("    java -jar build/wsh-scheduler.jar schedule --workflow Gene2life --algorithm WSH --node-count 13 --output results/single-schedule.csv");
         lines.add("    java -jar build/wsh-scheduler.jar verify --input results/metrics.csv");
         lines.add("");
-        lines.add("  Real execution commands (NEW):");
+        lines.add("  Real execution commands (Docker):");
         lines.add("    java -jar build/wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config/cluster/local-docker-nodes.csv --output results/real-execution.csv");
         lines.add("    java -jar build/wsh-scheduler.jar real-benchmark --node-counts 4,7,10,13 --output results/real-metrics.csv --details-dir results/real-executions");
+        lines.add("");
+        lines.add("  Big Data exploration:");
+        lines.add("    java -jar build/wsh-scheduler.jar workflow-info");
+        lines.add("      Shows total data volumes (GB/TB) for all built-in workflows,");
+        lines.add("      demonstrating the big-data scale of each pipeline.");
+        lines.add("");
+        lines.add("  Available workflows: Gene2life, Avianflu_small, Epigenomics, CyberShake");
         lines.forEach(System.out::println);
     }
 }

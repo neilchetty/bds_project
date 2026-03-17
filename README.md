@@ -155,7 +155,60 @@ java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH -
 
 ---
 
+## Where Is the Big Data?
+
+Run this command to see exactly where the big data lives in each workflow:
+
+```powershell
+java -jar build\wsh-scheduler.jar workflow-info
+```
+
+**Sample output:**
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║              Big Data Workflow Information                       ║
+║  This project schedules Big Data scientific workflows that       ║
+║  process and transfer data at GB-to-TB scale per run.            ║
+╚══════════════════════════════════════════════════════════════════╝
+
+  Workflow       : Avianflu_small
+  Tasks          : 104
+  DAG edges      : 103
+  Total data     : 20.02 GB
+  Big Data?      : YES ✓
+
+  Workflow       : Epigenomics
+  Tasks          : 100
+  DAG edges      : 184
+  Total data     : 47.97 GB
+  Big Data?      : YES ✓
+
+  Workflow       : CyberShake
+  Tasks          : 1000
+  DAG edges      : 1800
+  Total data     : 2.64 TB
+  Big Data?      : YES ✓
+
+Grand total data across all 4 workflows: 2.70 TB
+```
+
+The "big data" is the **inter-task data transferred across pipeline stages**:
+- Avianflu processes **20 GB** of molecular docking input across 102 parallel jobs.
+- Epigenomics processes **48 GB** of epigenomic sequencing data.
+- CyberShake simulates **2.6 TB** of seismic wave-propagation data across 1 000 tasks.
+
+The WSH scheduler's goal is to minimise the total makespan for these TB-scale pipelines
+by intelligently assigning tasks to heterogeneous Docker worker nodes.
+
+---
+
 ## CLI Commands
+
+### `workflow-info` — Show big-data statistics for all workflows
+```powershell
+java -jar build\wsh-scheduler.jar workflow-info
+```
 
 ### `execute` — Run a single workflow on real containers
 ```powershell
@@ -197,11 +250,12 @@ java -jar build\wsh-scheduler.jar benchmark `
 
 ## Workflows
 
-| Workflow | Tasks | Description |
-|----------|-------|-------------|
-| Gene2life | 8 | Genomic analysis pipeline |
-| Avianflu_small | 104 | Molecular docking pipeline |
-| Epigenomics | 100 | Epigenomic analysis pipeline |
+| Workflow | Tasks | Total Data | Description |
+|----------|-------|------------|-------------|
+| Gene2life | 8 | ~150 MB | Genomic analysis pipeline |
+| Avianflu_small | 104 | ~20 GB | Molecular docking pipeline |
+| Epigenomics | 100 | ~48 GB | Epigenomic analysis pipeline |
+| CyberShake | 1 000 | ~2.6 TB | Seismic hazard analysis (Big Data scale) |
 
 Custom DAX workflow files can be loaded with `--workflow-file path\to\workflow.xml`.
 
@@ -234,12 +288,13 @@ bds_project/
 ├── src/main/java/org/bds/wsh/
 │   ├── cli/                 # CLI commands and benchmark runner
 │   ├── config/              # Cluster configuration factory
+│   ├── data/                # Big-data statistics (WorkflowDataSummary)
 │   ├── execution/           # Real execution engine (Docker)
 │   ├── io/                  # CSV/DAX file I/O
 │   ├── metrics/             # Metric calculation
 │   ├── model/               # Core data models (Task, Node, Workflow)
 │   ├── scheduler/           # HEFT and WSH scheduling algorithms
-│   └── workflow/            # Built-in workflow definitions
+│   └── workflow/            # Built-in workflow definitions (incl. CyberShake)
 ├── src/test/                # Unit tests
 └── workflows/               # DAX XML workflow files
 ```
