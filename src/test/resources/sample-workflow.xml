@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<adag name="sample-dax" version="3.3">
+  <job id="prep" name="prep" runtime="12.0">
+    <uses file="input.dat" size="1048576" link="input"/>
+    <uses file="prep.dat" size="2048" link="output"/>
+  </job>
+  <job id="compute" name="compute" runtime="50.0">
+    <uses file="prep.dat" size="2048" link="input"/>
+    <uses file="compute.dat" size="1024" link="output"/>
+  </job>
+  <child ref="compute">
+    <parent ref="prep"/>
+  </child>
+</adag>

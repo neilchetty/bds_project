@@ -1,0 +1,14 @@
+node_id,cluster_id,cpu_factor,io_factor,ram_mb,container_name,docker_host
+C1-node1,C1,4.0,2.5,4096,worker-c1-1,
+C1-node2,C1,4.0,2.5,4096,worker-c1-2,
+C1-node3,C1,4.0,2.5,4096,worker-c1-3,
+C1-node4,C1,4.0,2.5,4096,worker-c1-4,
+C2-node1,C2,2.0,1.5,2048,worker-c2-1,tcp://REPLACE_PC2_IP:2375
+C2-node2,C2,2.0,1.5,2048,worker-c2-2,tcp://REPLACE_PC2_IP:2375
+C2-node3,C2,2.0,1.5,2048,worker-c2-3,tcp://REPLACE_PC2_IP:2375
+C3-node1,C3,1.0,1.0,1024,worker-c3-1,tcp://REPLACE_PC3_IP:2375
+C3-node2,C3,1.0,1.0,1024,worker-c3-2,tcp://REPLACE_PC3_IP:2375
+C3-node3,C3,1.0,1.0,1024,worker-c3-3,tcp://REPLACE_PC3_IP:2375
+C4-node1,C4,0.5,0.6,512,worker-c4-1,tcp://REPLACE_PC4_IP:2375
+C4-node2,C4,0.5,0.6,512,worker-c4-2,tcp://REPLACE_PC4_IP:2375
+C4-node3,C4,0.5,0.6,512,worker-c4-3,tcp://REPLACE_PC4_IP:2375

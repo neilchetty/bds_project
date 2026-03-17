@@ -1,0 +1,97 @@
+# Docker Compose for remote worker machines.
+# Copy this file to each remote Windows PC and run:
+#   docker compose -f docker-compose-worker.yml up -d
+#
+# IMPORTANT: Before starting, edit this file and uncomment ONLY the tier
+# that this machine should run:
+#   PC2 → C2 tier (mid-range)
+#   PC3 → C3 tier (baseline)
+#   PC4 → C4 tier (low-end)
+
+services:
+  # ─── C2 tier (mid-range): 2 CPU, 2048 MB ──────────────────────
+  # Uncomment for PC2
+  worker-c2-1:
+    image: ubuntu:22.04
+    container_name: worker-c2-1
+    hostname: worker-c2-1
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  worker-c2-2:
+    image: ubuntu:22.04
+    container_name: worker-c2-2
+    hostname: worker-c2-2
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  worker-c2-3:
+    image: ubuntu:22.04
+    container_name: worker-c2-3
+    hostname: worker-c2-3
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  # ─── C3 tier (baseline): 1 CPU, 1024 MB ───────────────────────
+  # Uncomment for PC3
+  #worker-c3-1:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-1
+  #  hostname: worker-c3-1
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  #worker-c3-2:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-2
+  #  hostname: worker-c3-2
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  #worker-c3-3:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-3
+  #  hostname: worker-c3-3
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  # ─── C4 tier (low-end): 1 CPU, 512 MB ─────────────────────────
+  # Uncomment for PC4
+  #worker-c4-1:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-1
+  #  hostname: worker-c4-1
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
+
+  #worker-c4-2:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-2
+  #  hostname: worker-c4-2
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
+
+  #worker-c4-3:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-3
+  #  hostname: worker-c4-3
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
