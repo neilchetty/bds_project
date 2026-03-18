@@ -1,14 +1,14 @@
 services:
-  # ─── C1 tier (high-end): 4 CPU, 4096 MB ───────────────────────
-  # On main machine. Other tiers run on remote machines.
+  # ─── C1 tier (high-end): 7 nodes ──────────────────────────────
+  # On main machine.
   worker-c1-1:
     image: ubuntu:22.04
     container_name: worker-c1-1
     hostname: worker-c1-1
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "1.5"
+    mem_limit: 2048m
     networks:
       - wsh-net
 
@@ -18,8 +18,8 @@ services:
     hostname: worker-c1-2
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "1.5"
+    mem_limit: 2048m
     networks:
       - wsh-net
 
@@ -29,8 +29,8 @@ services:
     hostname: worker-c1-3
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "1.5"
+    mem_limit: 2048m
     networks:
       - wsh-net
 
@@ -40,20 +40,54 @@ services:
     hostname: worker-c1-4
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "1.5"
+    mem_limit: 2048m
     networks:
       - wsh-net
 
-  # ─── For single-machine testing: all tiers on one PC ───────────
+  worker-c1-5:
+    image: ubuntu:22.04
+    container_name: worker-c1-5
+    hostname: worker-c1-5
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: 2048m
+    networks:
+      - wsh-net
+
+  worker-c1-6:
+    image: ubuntu:22.04
+    container_name: worker-c1-6
+    hostname: worker-c1-6
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: 2048m
+    networks:
+      - wsh-net
+
+  worker-c1-7:
+    image: ubuntu:22.04
+    container_name: worker-c1-7
+    hostname: worker-c1-7
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.5"
+    mem_limit: 2048m
+    networks:
+      - wsh-net
+
+  # ─── C2 tier (mid-range): 7 nodes ─────────────────────────────
+  # For single-machine testing: all tiers on one PC.
   worker-c2-1:
     image: ubuntu:22.04
     container_name: worker-c2-1
     hostname: worker-c2-1
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "2.0"
-    mem_limit: 2048m
+    cpus: "1.0"
+    mem_limit: 1536m
     networks:
       - wsh-net
     profiles: ["single-machine"]
@@ -64,8 +98,8 @@ services:
     hostname: worker-c2-2
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "2.0"
-    mem_limit: 2048m
+    cpus: "1.0"
+    mem_limit: 1536m
     networks:
       - wsh-net
     profiles: ["single-machine"]
@@ -76,19 +110,68 @@ services:
     hostname: worker-c2-3
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "2.0"
-    mem_limit: 2048m
+    cpus: "1.0"
+    mem_limit: 1536m
     networks:
       - wsh-net
     profiles: ["single-machine"]
 
+  worker-c2-4:
+    image: ubuntu:22.04
+    container_name: worker-c2-4
+    hostname: worker-c2-4
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1536m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c2-5:
+    image: ubuntu:22.04
+    container_name: worker-c2-5
+    hostname: worker-c2-5
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1536m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c2-6:
+    image: ubuntu:22.04
+    container_name: worker-c2-6
+    hostname: worker-c2-6
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1536m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c2-7:
+    image: ubuntu:22.04
+    container_name: worker-c2-7
+    hostname: worker-c2-7
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 1536m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  # ─── C3 tier (baseline): 7 nodes ──────────────────────────────
   worker-c3-1:
     image: ubuntu:22.04
     container_name: worker-c3-1
     hostname: worker-c3-1
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "1.0"
+    cpus: "0.5"
     mem_limit: 1024m
     networks:
       - wsh-net
@@ -100,7 +183,7 @@ services:
     hostname: worker-c3-2
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "1.0"
+    cpus: "0.5"
     mem_limit: 1024m
     networks:
       - wsh-net
@@ -112,19 +195,68 @@ services:
     hostname: worker-c3-3
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "1.0"
+    cpus: "0.5"
     mem_limit: 1024m
     networks:
       - wsh-net
     profiles: ["single-machine"]
 
+  worker-c3-4:
+    image: ubuntu:22.04
+    container_name: worker-c3-4
+    hostname: worker-c3-4
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: 1024m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c3-5:
+    image: ubuntu:22.04
+    container_name: worker-c3-5
+    hostname: worker-c3-5
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: 1024m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c3-6:
+    image: ubuntu:22.04
+    container_name: worker-c3-6
+    hostname: worker-c3-6
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: 1024m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c3-7:
+    image: ubuntu:22.04
+    container_name: worker-c3-7
+    hostname: worker-c3-7
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.5"
+    mem_limit: 1024m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  # ─── C4 tier (low-end): 7 nodes ───────────────────────────────
   worker-c4-1:
     image: ubuntu:22.04
     container_name: worker-c4-1
     hostname: worker-c4-1
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "1.0"
+    cpus: "0.25"
     mem_limit: 512m
     networks:
       - wsh-net
@@ -136,7 +268,7 @@ services:
     hostname: worker-c4-2
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "1.0"
+    cpus: "0.25"
     mem_limit: 512m
     networks:
       - wsh-net
@@ -148,7 +280,55 @@ services:
     hostname: worker-c4-3
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "1.0"
+    cpus: "0.25"
+    mem_limit: 512m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c4-4:
+    image: ubuntu:22.04
+    container_name: worker-c4-4
+    hostname: worker-c4-4
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 512m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c4-5:
+    image: ubuntu:22.04
+    container_name: worker-c4-5
+    hostname: worker-c4-5
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 512m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c4-6:
+    image: ubuntu:22.04
+    container_name: worker-c4-6
+    hostname: worker-c4-6
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 512m
+    networks:
+      - wsh-net
+    profiles: ["single-machine"]
+
+  worker-c4-7:
+    image: ubuntu:22.04
+    container_name: worker-c4-7
+    hostname: worker-c4-7
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "0.25"
     mem_limit: 512m
     networks:
       - wsh-net

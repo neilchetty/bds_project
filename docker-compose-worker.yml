@@ -9,7 +9,7 @@
 #   PC4 → C4 tier (low-end)
 
 services:
-  # ─── C2 tier (mid-range): 2 CPU, 2048 MB ──────────────────────
+  # ─── C2 tier (mid-range): 7 nodes ─────────────────────────────
   # Uncomment for PC2
   worker-c2-1:
     image: ubuntu:22.04
@@ -38,7 +38,43 @@ services:
     cpus: "2.0"
     mem_limit: 2048m
 
-  # ─── C3 tier (baseline): 1 CPU, 1024 MB ───────────────────────
+  worker-c2-4:
+    image: ubuntu:22.04
+    container_name: worker-c2-4
+    hostname: worker-c2-4
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  worker-c2-5:
+    image: ubuntu:22.04
+    container_name: worker-c2-5
+    hostname: worker-c2-5
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  worker-c2-6:
+    image: ubuntu:22.04
+    container_name: worker-c2-6
+    hostname: worker-c2-6
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  worker-c2-7:
+    image: ubuntu:22.04
+    container_name: worker-c2-7
+    hostname: worker-c2-7
+    command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2048m
+
+  # ─── C3 tier (baseline): 7 nodes ──────────────────────────────
   # Uncomment for PC3
   #worker-c3-1:
   #  image: ubuntu:22.04
@@ -67,7 +103,43 @@ services:
   #  cpus: "1.0"
   #  mem_limit: 1024m
 
-  # ─── C4 tier (low-end): 1 CPU, 512 MB ─────────────────────────
+  #worker-c3-4:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-4
+  #  hostname: worker-c3-4
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  #worker-c3-5:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-5
+  #  hostname: worker-c3-5
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  #worker-c3-6:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-6
+  #  hostname: worker-c3-6
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  #worker-c3-7:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c3-7
+  #  hostname: worker-c3-7
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 1024m
+
+  # ─── C4 tier (low-end): 7 nodes ───────────────────────────────
   # Uncomment for PC4
   #worker-c4-1:
   #  image: ubuntu:22.04
@@ -91,6 +163,42 @@ services:
   #  image: ubuntu:22.04
   #  container_name: worker-c4-3
   #  hostname: worker-c4-3
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
+
+  #worker-c4-4:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-4
+  #  hostname: worker-c4-4
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
+
+  #worker-c4-5:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-5
+  #  hostname: worker-c4-5
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
+
+  #worker-c4-6:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-6
+  #  hostname: worker-c4-6
+  #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
+  #  restart: unless-stopped
+  #  cpus: "1.0"
+  #  mem_limit: 512m
+
+  #worker-c4-7:
+  #  image: ubuntu:22.04
+  #  container_name: worker-c4-7
+  #  hostname: worker-c4-7
   #  command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
   #  restart: unless-stopped
   #  cpus: "1.0"

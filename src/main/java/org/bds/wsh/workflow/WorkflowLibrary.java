@@ -20,20 +20,21 @@ public final class WorkflowLibrary {
     }
 
     public static Workflow gene2life() {
+        // Paper Table: blast=180s, clustalw=300s, dnapars/protpars/drawgram=30s.
         List<Task> tasks = List.of(
-                task("Blast1", 62.0, 1.1 * MB, List.of(), Map.of()),
-                task("Blast2", 62.0, 1.1 * MB, List.of(), Map.of()),
-                task("Clustalw1", 90.0, 104_857.6 + 4 * KB, List.of("Blast1"),
+                task("Blast1", 180.0, 1.1 * MB, List.of(), Map.of()),
+                task("Blast2", 180.0, 1.1 * MB, List.of(), Map.of()),
+                task("Clustalw1", 300.0, 104_857.6 + 4 * KB, List.of("Blast1"),
                         Map.of("Blast1", 50 * MB)),
-                task("Clustalw2", 90.0, 104_857.6 + 4 * KB, List.of("Blast2"),
+                task("Clustalw2", 300.0, 104_857.6 + 4 * KB, List.of("Blast2"),
                         Map.of("Blast2", 50 * MB)),
-                task("Dnapars", 19.0, 4 * KB, List.of("Clustalw1"),
+                task("Dnapars", 30.0, 4 * KB, List.of("Clustalw1"),
                         Map.of("Clustalw1", 20 * MB)),
-                task("Protpars", 16.0, 4 * KB, List.of("Clustalw2"),
+                task("Protpars", 30.0, 4 * KB, List.of("Clustalw2"),
                         Map.of("Clustalw2", 20 * MB)),
-                task("Drawgram1", 18.0, 35 * KB, List.of("Dnapars"),
+                task("Drawgram1", 30.0, 35 * KB, List.of("Dnapars"),
                         Map.of("Dnapars", 5 * MB)),
-                task("Drawgram2", 18.0, 35 * KB, List.of("Protpars"),
+                task("Drawgram2", 30.0, 35 * KB, List.of("Protpars"),
                         Map.of("Protpars", 5 * MB))
         );
         return new Workflow("Gene2life", tasks);

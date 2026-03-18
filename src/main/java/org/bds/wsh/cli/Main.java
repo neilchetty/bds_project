@@ -47,7 +47,7 @@ public final class Main {
     }
 
     private static void runBenchmark(String[] args) throws Exception {
-        int[] nodeCounts = parseNodeCounts(optionValue(args, "--node-counts", "4,7,10,13"));
+        int[] nodeCounts = parseNodeCounts(optionValue(args, "--node-counts", "4,7,10,13,16,20,24,28"));
         Path output = Path.of(optionValue(args, "--output", "results/metrics.csv"));
         Path schedulesDir = Path.of(optionValue(args, "--schedules-dir", "results/schedules"));
         Path trainingFile = optionPath(args, "--training-file");
@@ -142,7 +142,7 @@ public final class Main {
         Path detailsDir = Path.of(optionValue(args, "--details-dir", "results/real-executions"));
         Path trainingFile = optionPath(args, "--training-file");
         String workflowFiles = optionValue(args, "--workflow-files", null);
-        String nodeCountsStr = optionValue(args, "--node-counts", "4,7,10,13");
+        String nodeCountsStr = optionValue(args, "--node-counts", "4,7,10,13,16,20,24,28");
 
         RuntimeModel rm = runtimeModel(trainingFile);
         List<Workflow> wfs = workflows(workflowFiles);
@@ -260,13 +260,13 @@ public final class Main {
         List<String> lines = new ArrayList<>();
         lines.add("Usage:");
         lines.add("  Simulation commands (existing):");
-        lines.add("    java -jar build/wsh-scheduler.jar benchmark --node-counts 4,7,10,13 --output results/metrics.csv --schedules-dir results/schedules");
+        lines.add("    java -jar build/wsh-scheduler.jar benchmark --node-counts 4,7,10,13,16,20,24,28 --output results/metrics.csv --schedules-dir results/schedules");
         lines.add("    java -jar build/wsh-scheduler.jar schedule --workflow Gene2life --algorithm WSH --node-count 13 --output results/single-schedule.csv");
         lines.add("    java -jar build/wsh-scheduler.jar verify --input results/metrics.csv");
         lines.add("");
         lines.add("  Real execution commands (NEW):");
         lines.add("    java -jar build/wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config/cluster/local-docker-nodes.csv --output results/real-execution.csv");
-        lines.add("    java -jar build/wsh-scheduler.jar real-benchmark --node-counts 4,7,10,13 --output results/real-metrics.csv --details-dir results/real-executions");
+        lines.add("    java -jar build/wsh-scheduler.jar real-benchmark --node-counts 4,7,10,13,16,20,24,28 --output results/real-metrics.csv --details-dir results/real-executions");
         lines.forEach(System.out::println);
     }
 }

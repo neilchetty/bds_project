@@ -13,6 +13,12 @@ import org.bds.wsh.model.Node;
  * </ul>
  * Bandwidth values are based on the paper's heterogeneous cluster setup
  * where sub-clusters are connected via a shared campus network.
+ *
+ * <p><strong>Note:</strong> This class is intentionally NOT used in the
+ * scheduling or rank calculation. The paper explicitly ignores communication
+ * costs because data sizes (KB–MB) are negligible relative to computation
+ * times (30s–300s) at 1 Gbps bandwidth. This class is retained as utility
+ * infrastructure for the real execution engine's data transfer layer.</p>
  */
 public final class CommunicationModel {
 

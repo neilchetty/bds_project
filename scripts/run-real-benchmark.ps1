@@ -10,7 +10,7 @@ Write-Host "`nBuilding Java project..." -ForegroundColor Cyan
 $BenchmarkArgs = @(
     "-jar", (Join-Path $Root "build\wsh-scheduler.jar"),
     "real-benchmark",
-    "--node-counts", "4,7,10,13",
+    "--node-counts", "4,7,10,13,16,20,24,28",
     "--output", (Join-Path $Root "results\real-metrics.csv"),
     "--details-dir", (Join-Path $Root "results\real-executions")
 )

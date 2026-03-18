@@ -18,8 +18,19 @@ public final class MetricCalculator {
 
     public MetricSet collect(ScheduleResult result, Workflow workflow, List<Node> nodes, int nodeCount, RuntimeModel runtimeModel) {
         double criticalPath = criticalPathSeconds(workflow, nodes, runtimeModel);
+        // Paper: Speedup = Σ w(task_i, p_slowest) / Makespan
+        // Sequential runtime on the SLOWEST node (worst-case single processor).
+        Node slowestNode = nodes.stream()
+                .max((a, b) -> {
+                    double sumA = workflow.tasks().values().stream()
+                            .mapToDouble(t -> runtimeModel.estimateSeconds(t, a)).sum();
+                    double sumB = workflow.tasks().values().stream()
+                            .mapToDouble(t -> runtimeModel.estimateSeconds(t, b)).sum();
+                    return Double.compare(sumA, sumB);
+                })
+                .orElse(nodes.get(0));
         double sequentialRuntime = workflow.tasks().values().stream()
-                .mapToDouble(task -> runtimeModel.estimateSeconds(task, nodes.get(0)))
+                .mapToDouble(task -> runtimeModel.estimateSeconds(task, slowestNode))
                 .sum();
         double makespan = result.makespanSeconds();
         double slr = criticalPath == 0.0 ? 0.0 : makespan / criticalPath;
