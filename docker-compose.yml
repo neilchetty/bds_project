@@ -90,7 +90,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c2-2:
     image: ubuntu:22.04
@@ -102,7 +101,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c2-3:
     image: ubuntu:22.04
@@ -114,7 +112,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c2-4:
     image: ubuntu:22.04
@@ -126,7 +123,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c2-5:
     image: ubuntu:22.04
@@ -138,7 +134,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c2-6:
     image: ubuntu:22.04
@@ -150,7 +145,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c2-7:
     image: ubuntu:22.04
@@ -162,7 +156,6 @@ services:
     mem_limit: 1536m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   # ─── C3 tier (baseline): 7 nodes ──────────────────────────────
   worker-c3-1:
@@ -175,7 +168,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c3-2:
     image: ubuntu:22.04
@@ -187,7 +179,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c3-3:
     image: ubuntu:22.04
@@ -199,7 +190,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c3-4:
     image: ubuntu:22.04
@@ -211,7 +201,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c3-5:
     image: ubuntu:22.04
@@ -223,7 +212,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c3-6:
     image: ubuntu:22.04
@@ -235,7 +223,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c3-7:
     image: ubuntu:22.04
@@ -247,7 +234,6 @@ services:
     mem_limit: 1024m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   # ─── C4 tier (low-end): 7 nodes ───────────────────────────────
   worker-c4-1:
@@ -260,7 +246,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c4-2:
     image: ubuntu:22.04
@@ -272,7 +257,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c4-3:
     image: ubuntu:22.04
@@ -284,7 +268,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c4-4:
     image: ubuntu:22.04
@@ -296,7 +279,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c4-5:
     image: ubuntu:22.04
@@ -308,7 +290,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c4-6:
     image: ubuntu:22.04
@@ -320,7 +301,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
   worker-c4-7:
     image: ubuntu:22.04
@@ -332,7 +312,6 @@ services:
     mem_limit: 512m
     networks:
       - wsh-net
-    profiles: ["single-machine"]
 
 networks:
   wsh-net:

@@ -68,6 +68,12 @@ public final class ClusterFactory {
         }
 
         int dockerHostIdx = headerIndex.getOrDefault("docker_host", -1);
+        int nodeIdIdx = requireColumn(headerIndex, "node_id", path);
+        int clusterIdIdx = requireColumn(headerIndex, "cluster_id", path);
+        int cpuFactorIdx = requireColumn(headerIndex, "cpu_factor", path);
+        int ioFactorIdx = requireColumn(headerIndex, "io_factor", path);
+        int ramMbIdx = requireColumn(headerIndex, "ram_mb", path);
+        int containerNameIdx = headerIndex.getOrDefault("container_name", -1);
 
         List<Node> nodes = new ArrayList<>();
         for (int lineIdx = 1; lineIdx < lines.size(); lineIdx++) {
@@ -76,16 +82,27 @@ public final class ClusterFactory {
             String[] parts = line.split(",", -1);
             String dockerHost = (dockerHostIdx >= 0 && dockerHostIdx < parts.length)
                     ? parts[dockerHostIdx].trim() : null;
+            String containerName = (containerNameIdx >= 0 && containerNameIdx < parts.length)
+                    ? parts[containerNameIdx].trim() : parts[nodeIdIdx].trim();
             nodes.add(new Node(
-                    parts[0].trim(),
-                    parts[1].trim(),
-                    Double.parseDouble(parts[2].trim()),
-                    Double.parseDouble(parts[3].trim()),
-                    Integer.parseInt(parts[4].trim()),
-                    parts.length > 5 ? parts[5].trim() : parts[0].trim(),
+                    parts[nodeIdIdx].trim(),
+                    parts[clusterIdIdx].trim(),
+                    Double.parseDouble(parts[cpuFactorIdx].trim()),
+                    Double.parseDouble(parts[ioFactorIdx].trim()),
+                    Integer.parseInt(parts[ramMbIdx].trim()),
+                    containerName.isEmpty() ? parts[nodeIdIdx].trim() : containerName,
                     dockerHost
             ));
         }
         return nodes;
+    }
+
+    private static int requireColumn(Map<String, Integer> headerIndex, String column, Path path) {
+        Integer idx = headerIndex.get(column);
+        if (idx == null) {
+            throw new IllegalArgumentException("Required column '" + column + "' not found in CSV: " + path
+                    + ". Available: " + headerIndex.keySet());
+        }
+        return idx;
     }
 }

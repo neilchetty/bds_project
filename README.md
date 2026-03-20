@@ -1,223 +1,36 @@
-# WSH: Workflow Scheduling for Heterogeneous Computing
+# WSH: Workflow Scheduling for Heterogeneous Hadoop Clusters
 
-Real-world implementation of the WSH algorithm from the paper  
-**"Scheduling of Big Data Workflows in the Hadoop Framework with Heterogeneous Computing Cluster"**
+Implementation of the **WSH (Workflow Scheduling for Heterogeneous computing)** algorithm from the paper *"Scheduling of Big Data Workflows in the Hadoop Framework with Heterogeneous Computing Cluster"* (2025).
 
-This project schedules and executes real workloads on Docker containers, comparing WSH against the HEFT baseline algorithm.
-
----
-
-## Platform & Hardware
-
-> **Windows only.** Designed for Windows 10/11 with Docker Desktop.
-
-| Spec | Value |
-|------|-------|
-| Machine | DESKTOP-722HBTB |
-| Processor | Intel® Xeon® w5-2565X (24 cores, 3.19 GHz) |
-| RAM | 64 GB (63.6 GB usable) |
-| OS | Windows 64-bit |
+This project compares **WSH** against **HEFT** (Heterogeneous Earliest Finish Time) using three bioinformatics workflows (**Gene2life**, **Avian Flu**, **Epigenomics**) across a Docker-based heterogeneous cluster with 4 performance tiers (C1–C4, 28 nodes total).
 
 ---
 
-## Architecture
+## Table of Contents
 
-All 28 Docker worker containers run on the **single local machine** (single-machine mode), organized into 4 heterogeneous tiers:
-
-```
-Main PC (Intel Xeon w5-2565X, 64 GB RAM)
-┌────────────────────────────────────────────────────────────────┐
-│ Java Scheduler (host process)                                  │
-│                                                                │
-│ C1 tier (7 nodes): worker-c1-1..c1-7  │ 1.5 CPU, 2048 MB each │
-│ C2 tier (7 nodes): worker-c2-1..c2-7  │ 1.0 CPU, 1536 MB each │
-│ C3 tier (7 nodes): worker-c3-1..c3-7  │ 0.5 CPU, 1024 MB each │
-│ C4 tier (7 nodes): worker-c4-1..c4-7  │ 0.25 CPU, 512 MB each │
-│                                                                │
-│ Total: 28 containers, ~22.75 CPU cores, ~35 GB RAM             │
-└────────────────────────────────────────────────────────────────┘
-```
-
-### Scheduler Node Tiers (Abstract Performance Weights)
-
-| Tier | Nodes | cpu_factor | io_factor | ram_mb | Paper Equivalent |
-|------|-------|-----------|-----------|--------|------------------|
-| C1 (high-end) | 7 | 4.0 | 2.5 | 4096 | 4 socket × 2 core VM |
-| C2 (mid-range) | 7 | 2.0 | 1.5 | 2048 | 2 socket × 2 core VM |
-| C3 (baseline) | 7 | 1.0 | 1.0 | 1024 | 1 socket × 2 core VM |
-| C4 (low-end) | 7 | 0.5 | 0.6 | 512 | 1 socket × 1 core VM |
-
-> **Note:** The paper uses 12 nodes (3 per tier). We use 28 nodes (7 per tier) to leverage the Xeon hardware for more parallelism while keeping the same heterogeneous tier ratios.
+1. [Prerequisites](#prerequisites)
+2. [Project Structure](#project-structure)
+3. [Workflows](#workflows)
+4. [Phase 1: Single Machine Setup](#phase-1-single-machine-setup)
+5. [Phase 2: Multi-Machine Setup (4 PCs)](#phase-2-multi-machine-setup-4-pcs)
+6. [Running Modes](#running-modes)
+7. [Big Data Pipeline (HDFS)](#big-data-pipeline-hdfs)
+8. [Full Command Reference](#full-command-reference)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Prerequisites
 
-| Software | Version | Download |
-|----------|---------|----------|
-| Docker Desktop | Latest | https://www.docker.com/products/docker-desktop/ |
-| JDK | 21 or later | https://adoptium.net/ |
-
----
-
-## Setup Instructions
-
-### Step 1: Install Docker Desktop
-
-1. Install Docker Desktop
-2. Open Docker Desktop → **Settings** → **General**
-3. ✅ Check **"Expose daemon on tcp://localhost:2375 without TLS"**
-4. Click **Apply & Restart**
-5. Verify Docker works:
-   ```powershell
-   docker run hello-world
-   ```
-
-### Step 2: Start all containers (single-machine mode)
-
-```powershell
-cd C:\Users\CSE_SDPL\Desktop\bds_project
-docker compose --profile single-machine up -d
-```
-
-This starts all 28 worker containers (C1–C4 tiers) on this machine.
-
-### Step 3: Verify containers are running
-
-```powershell
-docker ps --format "table {{.Names}}\t{{.Status}}"
-```
-
-You should see 28 containers: `worker-c1-1` through `worker-c4-7`.
-
-### Step 4: Build the project
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
-```
-
-### Step 5: Run quick test
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-quick-test.ps1
-```
-
-### Step 6: Run full benchmark
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1
-```
-
-This runs HEFT vs WSH across node counts `4,7,10,13,16,20,24,28` for all three workflows.
-
----
-
-## CLI Commands
-
-### `execute` — Run a single workflow on real containers
-```powershell
-java -jar build\wsh-scheduler.jar execute `
-    --workflow Gene2life `
-    --algorithm WSH `
-    --nodes-file config\cluster\local-docker-nodes.csv `
-    --output results\real-execution.csv
-```
-
-### `real-benchmark` — Full HEFT vs WSH comparison
-```powershell
-java -jar build\wsh-scheduler.jar real-benchmark `
-    --node-counts 4,7,10,13,16,20,24,28 `
-    --output results\real-metrics.csv `
-    --details-dir results\real-executions
-```
-
-### `benchmark` — Simulated comparison (no Docker needed)
-```powershell
-java -jar build\wsh-scheduler.jar benchmark `
-    --node-counts 4,7,10,13,16,20,24,28 `
-    --output results\metrics.csv `
-    --schedules-dir results\schedules
-```
-
-### `schedule` — Generate a single schedule
-```powershell
-java -jar build\wsh-scheduler.jar schedule `
-    --workflow Gene2life --algorithm WSH `
-    --node-count 28 --output results\single-schedule.csv
-```
-
-### `verify` — Validate metrics file
-```powershell
-java -jar build\wsh-scheduler.jar verify --input results\metrics.csv
-```
-
----
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| `results/real-metrics.csv` | Comparison: simulated vs real makespans, WSH improvement % |
-| `results/real-executions/` | Per-task execution details (timestamps, durations) |
-| `results/metrics.csv` | Simulated-only metrics |
-| `results/schedules/` | Per-workflow schedule CSVs |
-
----
-
-## Workflows
-
-| Workflow | Tasks | Description | Paper Source |
-|----------|-------|-------------|-------------|
-| Gene2life | 8 | Genomic analysis: blast → clustalw → dnapars/protpars → drawgram | Table 6 |
-| Avianflu_small | 104 | Molecular docking: prepare → autogrid → 102× autodock | Section 5.2 |
-| Epigenomics | 100 | Epigenomic analysis: layered DAG pipeline | Section 5.2 |
-
-### Gene2life Task Costs (matching paper)
-
-| Task | Workload (seconds) | Description |
-|------|-------------------|-------------|
-| Blast1, Blast2 | 180 | Sequence similarity search |
-| Clustalw1, Clustalw2 | 300 | Multiple sequence alignment |
-| Dnapars | 30 | DNA parsimony analysis |
-| Protpars | 30 | Protein parsimony analysis |
-| Drawgram1, Drawgram2 | 30 | Phylogenetic tree rendering |
-
-Custom DAX workflow files can be loaded with `--workflow-file path\to\workflow.xml`.
-
----
-
-## How It Works
-
-1. **Schedule**: HEFT or WSH algorithm assigns tasks to nodes based on upward rank prioritization and cluster ordering (communication costs are ignored per the paper — data sizes are negligible at 1 Gbps)
-2. **Execute**: Tasks are dispatched to Docker containers via `docker exec`:
-   - CPU work: `dd if=/dev/urandom | sha256sum` (parallel workers)
-   - IO work: `dd write` + `dd read` cycles
-3. **Transfer**: Data between tasks on different containers is piped via `docker exec cat | docker exec cat >`
-4. **Measure**: Actual wall-clock timestamps recorded for every task
-5. **Compare**: WSH improvement over HEFT computed from real execution times
-
-### Metrics (per paper)
-
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| **SLR** | Makespan / CriticalPath(fastest nodes) | Schedule Length Ratio (lower is better) |
-| **Speedup** | SequentialTime(slowest node) / Makespan | Parallel speedup (higher is better) |
-
----
-
-## Node Configuration Files
-
-| File | Nodes | Distribution |
-|------|-------|-------------|
-| `nodes-4.csv` | 4 | 1 per tier |
-| `nodes-7.csv` | 7 | 2 C1 + 2 C2 + 2 C3 + 1 C4 |
-| `nodes-10.csv` | 10 | 3 C1 + 2 C2 + 3 C3 + 2 C4 |
-| `nodes-13.csv` | 13 | 4 C1 + 3 C2 + 3 C3 + 3 C4 |
-| `nodes-16.csv` | 16 | 4 per tier |
-| `nodes-20.csv` | 20 | 5 per tier |
-| `nodes-24.csv` | 24 | 6 per tier |
-| `nodes-28.csv` | 28 | 7 per tier |
-| `local-docker-nodes.csv` | 28 | Full cluster (all local) |
+| Requirement | Details |
+|---|---|
+| **OS** | Windows 10/11 (both phases) |
+| **Docker Desktop** | v4.0+ with WSL2 backend |
+| **JDK** | 21 or newer |
+| **RAM** | 36 GB+ (single machine) / 8 GB per PC (multi-machine) |
+| **CPU** | 8+ cores (single machine) / 4+ cores per PC (multi-machine) |
+| **Disk** | 10 GB (simulation) / 80 GB+ (big data mode) |
+| **Network** | — (single machine) / 1 Gbps Ethernet, `172.16.x.x/23` subnet (multi-machine) |
 
 ---
 
@@ -225,42 +38,372 @@ Custom DAX workflow files can be loaded with `--workflow-file path\to\workflow.x
 
 ```
 bds_project/
-├── config/cluster/          # Node configuration CSVs
-├── docker-compose.yml       # All containers (C1 local + C2-C4 single-machine profile)
-├── docker-compose-worker.yml # Remote PC container template
+├── config/
+│   ├── cluster/
+│   │   ├── local-docker-nodes.csv     # 28 nodes for single machine
+│   │   ├── multi-machine-nodes.csv    # 28 nodes across 4 PCs
+│   │   └── nodes-4.csv               # Minimal 4-node config
+│   └── ip.txt                         # Remote PC IPs (multi-machine)
 ├── scripts/
-│   ├── build.ps1            # Compile and package JAR
-│   ├── run-tests.ps1        # Run unit tests
-│   ├── run-quick-test.ps1   # Quick smoke test
-│   └── run-real-benchmark.ps1 # Full benchmark (8 node counts)
-├── src/main/java/org/bds/wsh/
-│   ├── cli/                 # CLI commands and benchmark runner
-│   ├── config/              # Cluster configuration factory
-│   ├── execution/           # Real execution engine (Docker)
-│   ├── io/                  # CSV/DAX file I/O
-│   ├── metrics/             # Metric calculation (SLR, Speedup)
-│   ├── model/               # Core data models (Task, Node, Workflow)
-│   ├── scheduler/           # HEFT and WSH scheduling algorithms
-│   └── workflow/            # Built-in workflow definitions
-├── src/test/                # Unit tests
-└── Main-Paper.pdf           # Reference paper
+│   ├── build.ps1                      # Compile Java project
+│   ├── run-tests.ps1                  # Run unit tests
+│   ├── run-quick-test.ps1             # Quick smoke test (Gene2life)
+│   ├── run-real-benchmark.ps1         # Full HEFT vs WSH comparison
+│   ├── start-single-machine.ps1       # Start 28 containers locally
+│   ├── start-multi-machine.ps1        # Start C1 tier on main PC
+│   ├── stop-all-containers.ps1        # Stop all containers
+│   ├── setup-remote-machine.ps1       # Configure remote PCs
+│   ├── configure-cluster.ps1          # Auto-configure IPs from ip.txt
+│   ├── setup-hadoop.ps1               # Set up HDFS cluster
+│   ├── generate-bigdata.ps1           # Generate 30-60 GB test data
+│   ├── upload-to-hdfs.ps1             # Upload data to HDFS
+│   └── run-bigdata-gene2life.ps1      # Full big data pipeline
+├── src/main/java/org/bds/wsh/         # Java source code
+├── src/test/java/org/bds/wsh/tests/   # Unit tests
+├── workflows/                          # DAX workflow XML files
+├── docker-compose.yml                  # Docker services definition
+└── README.md                           # This file
 ```
 
 ---
 
-## Expected Results
+## Workflows
 
-WSH should outperform HEFT, especially with larger heterogeneous clusters:
+| Workflow | Tasks | Critical Path | Estimated Makespan (28 nodes) |
+|---|---|---|---|
+| **Gene2life** | 8 | blast→clustalw→pars→drawgram | ~510s (simulation) |
+| **Avianflu_small** | 102 | prepare→autogrid→100×autodock | ~180,000s ⚠️ |
+| **Epigenomics** | 100 | split→filter→convert→map→merge | ~400,000s ⚠️ |
+| **Avianflu_fast** ★ | 102 | Same DAG, 163× compressed | ~1,100s |
+| **Epigenomics_fast** ★ | 100 | Same DAG, 160× compressed | ~1,100s |
 
-| Nodes | Expected WSH Improvement |
-|-------|-------------------------|
-| 4     | 2-5% |
-| 7     | 5-10% |
-| 10    | 8-15% |
-| 13    | 10-20% |
-| 16    | 12-22% |
-| 20    | 15-25% |
-| 24    | 15-25% |
-| 28    | 15-28% |
+> ★ **Fast variants** have identical DAG topology but scaled runtimes for feasible testing. Use these for simulation runs.
 
-These ranges are consistent with the paper's findings. Actual results depend on container load and system conditions.
+---
+
+## Phase 1: Single Machine Setup
+
+All 28 containers run on a single Windows PC with Docker Desktop.
+
+### Step 1: Install Prerequisites
+
+```powershell
+# Verify Java version (must be 21+)
+java --version
+
+# Verify Docker is running
+docker version
+```
+
+### Step 2: Start All Containers
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-single-machine.ps1
+```
+
+This starts 28 containers (7 per tier: C1–C4). Wait for "All 28 containers running!" message.
+
+### Step 3: Build the Project
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
+```
+
+### Step 4: Run Unit Tests
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-tests.ps1
+```
+
+Expected output: `All Java scheduler tests passed.`
+
+### Step 5: Run Quick Smoke Test
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-quick-test.ps1
+```
+
+Executes Gene2life with WSH on all 28 nodes. Takes ~2 minutes.
+
+### Step 6: Run Simulation Benchmark
+
+```powershell
+# All 3 original workflows (Gene2life runs fast, others are long)
+java -jar build\wsh-scheduler.jar benchmark --output results\metrics.csv --schedules-dir results\schedules
+
+# Just Gene2life + fast variants (recommended for quick testing)
+java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config\cluster\local-docker-nodes.csv --output results\gene2life-wsh.csv
+java -jar build\wsh-scheduler.jar execute --workflow Avianflu_fast --algorithm WSH --nodes-file config\cluster\local-docker-nodes.csv --output results\avianflu-fast-wsh.csv
+java -jar build\wsh-scheduler.jar execute --workflow Epigenomics_fast --algorithm WSH --nodes-file config\cluster\local-docker-nodes.csv --output results\epigenomics-fast-wsh.csv
+```
+
+### Step 7: Run Full Real-World Benchmark (HEFT vs WSH)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1
+```
+
+Runs all workflows with both algorithms across node counts 4,7,10,13,16,20,24,28.
+
+### Step 8: Stop Containers When Done
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-all-containers.ps1
+```
+
+---
+
+## Phase 2: Multi-Machine Setup (4 PCs)
+
+Distributes the 28 containers across 4 Windows PCs connected via Ethernet.
+
+| PC | Role | Tier | Containers | IP Example |
+|---|---|---|---|---|
+| **PC1** (Main) | Scheduler + C1 | C1 | worker-c1-1 to c1-7 | 172.16.0.1 |
+| **PC2** | Worker | C2 | worker-c2-1 to c2-7 | 172.16.0.2 |
+| **PC3** | Worker | C3 | worker-c3-1 to c3-7 | 172.16.0.3 |
+| **PC4** | Worker | C4 | worker-c4-1 to c4-7 | 172.16.0.4 |
+
+### Step 1: Setup Remote PCs (PC2, PC3, PC4)
+
+On **each remote PC**, copy `scripts/setup-remote-machine.ps1` and run as **Administrator**:
+
+```powershell
+# On PC2:
+powershell -ExecutionPolicy Bypass -File setup-remote-machine.ps1 -Tier C2
+
+# On PC3:
+powershell -ExecutionPolicy Bypass -File setup-remote-machine.ps1 -Tier C3
+
+# On PC4:
+powershell -ExecutionPolicy Bypass -File setup-remote-machine.ps1 -Tier C4
+```
+
+> **Important:** Also enable Docker TCP API in Docker Desktop:
+> Settings → General → ✅ "Expose daemon on tcp://localhost:2375 without TLS"
+
+Note the IP address displayed by each script.
+
+### Step 2: Configure IPs on Main PC
+
+Edit `config/ip.txt` with the 3 remote PC IPs (one per line):
+
+```
+172.16.0.2
+172.16.0.3
+172.16.0.4
+```
+
+Then auto-configure the CSV files:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\configure-cluster.ps1
+```
+
+### Step 3: Start C1 Tier on Main PC
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-multi-machine.ps1
+```
+
+### Step 4: Verify Connectivity
+
+```powershell
+docker -H tcp://172.16.0.2:2375 ps
+docker -H tcp://172.16.0.3:2375 ps
+docker -H tcp://172.16.0.4:2375 ps
+```
+
+### Step 5: Build and Run
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
+
+# Quick test
+java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config\cluster\multi-machine-nodes.csv --output results\multi-gene2life.csv
+
+# Full benchmark
+powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1
+```
+
+---
+
+## Running Modes
+
+### Mode 1: Simulation (No Docker Required)
+
+Calculates theoretical schedules and metrics without executing on containers.
+
+```powershell
+java -jar build\wsh-scheduler.jar benchmark --node-counts 4,7,10,13,16,20,24,28 --output results\metrics.csv --schedules-dir results\schedules
+```
+
+### Mode 2: Real Execution (Docker Required)
+
+Runs actual workloads inside Docker containers with real CPU/IO stress.
+
+```powershell
+java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config\cluster\local-docker-nodes.csv --output results\execution.csv
+```
+
+### Mode 3: Full Benchmark Comparison
+
+Compares WSH vs HEFT across multiple node configurations.
+
+```powershell
+java -jar build\wsh-scheduler.jar real-benchmark --node-counts 4,7,10,13,16,20,24,28 --output results\real-metrics.csv --details-dir results\real-executions
+```
+
+---
+
+## Big Data Pipeline (HDFS)
+
+Run the Gene2life workflow with 30-60 GB of synthetic data on Hadoop HDFS.
+
+### Quick Start (Single Command)
+
+```powershell
+# This handles everything: HDFS setup, data generation, upload, and execution.
+powershell -ExecutionPolicy Bypass -File .\scripts\run-bigdata-gene2life.ps1 -SizeGB 30
+```
+
+### Step-by-Step
+
+#### 1. Setup Hadoop HDFS
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-hadoop.ps1
+# Web UI: http://localhost:9870
+```
+
+#### 2. Generate Synthetic Data
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\generate-bigdata.ps1 -SizeGB 30
+# Creates: bigdata/blast_input1.dat, blast_input2.dat, clustalw_ref.dat, etc.
+```
+
+#### 3. Upload to HDFS
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\upload-to-hdfs.ps1
+# Uploads to: hdfs:///wsh/gene2life/
+```
+
+#### 4. Run Gene2life on Big Data
+
+```powershell
+java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config\cluster\local-docker-nodes.csv --output results\bigdata-gene2life-wsh.csv
+```
+
+### Multi-Machine Big Data
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-bigdata-gene2life.ps1 -Phase multi -SizeGB 60
+```
+
+---
+
+## Full Command Reference
+
+| Command | Description |
+|---|---|
+| `benchmark` | Simulated benchmark (no Docker) |
+| `schedule` | Generate single schedule |
+| `verify` | Validate metrics CSV |
+| `execute` | Run workflow on Docker containers |
+| `real-benchmark` | Full HEFT vs WSH comparison on Docker |
+
+### Common Options
+
+| Option | Description | Default |
+|---|---|---|
+| `--workflow` | Workflow name | `Gene2life` |
+| `--algorithm` | `WSH` or `HEFT` | `WSH` |
+| `--node-counts` | Comma-separated node counts | `4,7,10,13,16,20,24,28` |
+| `--nodes-file` | Path to node CSV | Paper-faithful cluster |
+| `--output` | Output CSV path | `results/metrics.csv` |
+| `--training-file` | Training profile CSV | None (static model) |
+
+### Available Workflows
+
+| Name | Built-in | Description |
+|---|---|---|
+| `Gene2life` | ✅ | 8-task genomic pipeline (~510s) |
+| `Avianflu_small` | ✅ | 102-task molecular docking (~180,000s) |
+| `Avianflu_fast` | ✅ | Fast variant (~1,100s) |
+| `Epigenomics` | ✅ | 100-task epigenomic pipeline (~400,000s) |
+| `Epigenomics_fast` | ✅ | Fast variant (~1,100s) |
+
+---
+
+## Troubleshooting
+
+### Docker containers won't start
+
+```powershell
+# Check Docker Desktop is running
+docker version
+
+# Check available resources
+docker system info | Select-String -Pattern "Total Memory|CPUs"
+
+# Restart Docker Desktop and try again
+```
+
+### "No candidate nodes found" error
+
+This means the scheduler has zero nodes available. Ensure:
+- You're passing the correct `--nodes-file`
+- The CSV file has valid data with the correct header
+
+### Remote PC connectivity fails
+
+```powershell
+# Verify Docker TCP API is enabled on remote PC
+docker -H tcp://<REMOTE_IP>:2375 version
+
+# Check Windows Firewall allows port 2375
+# Check PCs are on the same subnet (172.16.x.x/23)
+```
+
+### Tasks time out (> 600s)
+
+The `TIME_COMPRESSION_FACTOR` in `WorkloadExecutor.java` is set to 10× by default. For very long workflows, consider using the **fast variants** (`Avianflu_fast`, `Epigenomics_fast`) instead.
+
+### Unit tests fail after changes
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\run-tests.ps1
+```
+
+### HDFS NameNode won't start
+
+```powershell
+# Remove old containers and retry
+docker rm -f hadoop-namenode hadoop-datanode1 hadoop-datanode2
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-hadoop.ps1
+```
+
+---
+
+## Cluster Configuration
+
+### Node Tiers (Paper Table III)
+
+| Tier | CPU Factor | IO Factor | RAM | Docker CPUs | Docker Memory |
+|---|---|---|---|---|---|
+| **C1** (High) | 4.0 | 2.5 | 4 GB | 4.0 | 4096 MB |
+| **C2** (Mid) | 2.0 | 1.5 | 2 GB | 2.0 | 2048 MB |
+| **C3** (Base) | 1.0 | 1.0 | 1 GB | 1.0 | 1024 MB |
+| **C4** (Low) | 0.5 | 0.6 | 512 MB | 1.0 | 512 MB |
+
+### Output Files
+
+Results are saved to the `results/` directory:
+- `metrics.csv` — Simulation benchmark results
+- `real-metrics.csv` — Real execution benchmark results
+- `schedules/` — Per-workflow schedule CSVs
+- `real-executions/` — Per-run execution detail CSVs
+- `bigdata-gene2life-*.csv` — Big data pipeline results

@@ -123,8 +123,16 @@ public final class DataTransferManager {
             throw new RuntimeException("Transfer timed out");
         }
 
-        // Cleanup source file.
+        if (readProc.exitValue() != 0) {
+            throw new RuntimeException("Transfer read failed with exit code " + readProc.exitValue());
+        }
+        if (writeProc.exitValue() != 0) {
+            throw new RuntimeException("Transfer write failed with exit code " + writeProc.exitValue());
+        }
+
+        // Cleanup source and target files.
         WorkloadExecutor.runDockerExec(source, "rm -f " + sourceFile);
+        WorkloadExecutor.runDockerExec(target, "rm -f " + targetFile);
     }
 
     private static boolean sameHost(Node a, Node b) {

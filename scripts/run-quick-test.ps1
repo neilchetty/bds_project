@@ -6,9 +6,9 @@ $Root = Split-Path -Parent $PSScriptRoot
 Write-Host "`nBuilding Java project..." -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot "build.ps1")
 
-# Run quick single-workflow execution to verify everything works.
+# Run quick test with all 28 nodes to verify Docker setup works.
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "Quick Test: Gene2life + WSH (4 nodes)" -ForegroundColor Cyan
+Write-Host "Quick Test: Gene2life + WSH (28 nodes)" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
 
 $TestArgs = @(
@@ -16,7 +16,7 @@ $TestArgs = @(
     "execute",
     "--workflow", "Gene2life",
     "--algorithm", "WSH",
-    "--nodes-file", (Join-Path $Root "config\cluster\nodes-4.csv"),
+    "--nodes-file", (Join-Path $Root "config\cluster\local-docker-nodes.csv"),
     "--output", (Join-Path $Root "results\quick-test-execution.csv")
 )
 

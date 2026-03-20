@@ -1,0 +1,9 @@
+# IP addresses of remote PCs for multi-machine mode.
+# One IP per line: PC2, PC3, PC4 (in order).
+# Lines starting with # are comments.
+# Format: xxx.xxx.xxx.xxx
+#
+# Example (172.16.x.x/23 subnet):
+# 172.16.0.2
+# 172.16.0.3
+# 172.16.0.4

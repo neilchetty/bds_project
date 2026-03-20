@@ -155,10 +155,10 @@ public final class Main {
             if (java.nio.file.Files.exists(nodesFile)) {
                 nodeConfigs.add(ClusterFactory.loadFromCsv(nodesFile));
             } else {
-                // Fall back to the full nodes file, using first N nodes.
-                Path fullNodesFile = Path.of("config/cluster/local-docker-nodes.csv");
-                List<Node> allNodes = ClusterFactory.loadFromCsv(fullNodesFile);
-                nodeConfigs.add(allNodes.subList(0, Math.min(count, allNodes.size())));
+                // Fall back to paper cluster model which distributes nodes
+                // round-robin across C1-C4 tiers for proper heterogeneity.
+                System.out.println("Note: config/cluster/nodes-" + count + ".csv not found, using paper cluster model.");
+                nodeConfigs.add(ClusterFactory.buildPaperCluster(count));
             }
         }
 
@@ -243,8 +243,11 @@ public final class Main {
         return switch (name.toLowerCase(Locale.ROOT)) {
             case "gene2life", "gen2life" -> WorkflowLibrary.gene2life();
             case "avianflu_small", "avianflu" -> WorkflowLibrary.avianfluSmall();
+            case "avianflu_fast" -> WorkflowLibrary.avianfluSmallFast();
             case "epigenomics" -> WorkflowLibrary.epigenomics();
-            default -> throw new IllegalArgumentException("Unknown workflow: " + name);
+            case "epigenomics_fast" -> WorkflowLibrary.epigenomicsFast();
+            default -> throw new IllegalArgumentException("Unknown workflow: " + name
+                    + ". Available: Gene2life, Avianflu_small, Avianflu_fast, Epigenomics, Epigenomics_fast");
         };
     }
 

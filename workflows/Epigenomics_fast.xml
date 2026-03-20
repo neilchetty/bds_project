@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fast version of Epigenomics workflow for rapid testing.
+     Same layered DAG structure as Epigenomics_100.xml but with ~160x runtime compression.
+     Original runtimes ranged from 0.02s to 23571s.
+     Fast runtimes ranged from ~0.001s to ~147s.
+     
+     Note: The built-in WorkflowLibrary.epigenomicsFast() generates this workflow
+     programmatically with the exact same topology (same seed=2026) but scaled runtimes.
+     This file exists as a reference for the DAG structure. -->
+<adag name="epigenomics_fast" jobCount="100" fileCount="0" childCount="99"
+      xmlns="http://pegasus.isi.edu/schema/DAX">
+  <!-- Representative structure: same pipeline stages as original.
+       Layer 1: fastqSplit (1 task)
+       Layer 2: filterContams (24 tasks, each depends on fastqSplit)  
+       Layer 3: sol2sanger (24 tasks, each depends on corresponding filterContams)
+       Layer 4: fastq2bfq (24 tasks, pipeline chain)
+       Layer 5: map (24 tasks, pipeline chain) — originally ~16000s each, now ~100s
+       Layer 6: mapMerge (1 task, depends on all map tasks)
+       Layer 7: maqindex (1 task)
+       Layer 8: pileup (1 task) -->
+  <job id="ID00000" namespace="Genome" name="fastqSplit_chr21" version="1.0" runtime="0.22">
+    <uses file="chr210.sfq" link="input" size="1468550"/>
+    <uses file="chr21.0.0.sfq" link="output" size="62501"/>
+  </job>
+  <job id="ID00001" namespace="Genome" name="filterContams_chr21" version="1.0" runtime="0.007">
+    <uses file="chr21.0.0.sfq" link="input" size="62501"/>
+    <uses file="chr21.0.0.nocontam.sfq" link="output" size="31432"/>
+  </job>
+  <job id="ID00025" namespace="Genome" name="sol2sanger_chr21" version="1.0" runtime="0.004">
+    <uses file="chr21.0.0.nocontam.sfq" link="input" size="31432"/>
+    <uses file="chr21.0.0.nocontam.fq" link="output" size="26713"/>
+  </job>
+  <job id="ID00049" namespace="Genome" name="fastq2bfq_chr21" version="1.0" runtime="0.006">
+    <uses file="chr21.0.0.nocontam.fq" link="input" size="26713"/>
+    <uses file="chr21.0.0.nocontam.bfq" link="output" size="6416"/>
+  </job>
+  <job id="ID00073" namespace="Genome" name="map_chr21" version="1.0" runtime="82.08">
+    <uses file="chr21.BS.bfa" link="input" size="33130923"/>
+    <uses file="chr21.0.0.nocontam.bfq" link="input" size="6416"/>
+    <uses file="chr21.0.0.nocontam.map" link="output" size="6974"/>
+  </job>
+  <job id="ID00097" namespace="Genome" name="mapMerge_chr21" version="1.0" runtime="0.07">
+    <uses file="chr21.0.0.nocontam.map" link="input" size="6974"/>
+    <uses file="chr21.nocontam.map" link="output" size="149093"/>
+  </job>
+  <job id="ID00098" namespace="Genome" name="maqindex_chr21" version="1.0" runtime="0.0001">
+    <uses file="chr21.nocontam.map" link="input" size="149093"/>
+    <uses file="chr21.nocontam.chr.map" link="output" size="2644"/>
+  </job>
+  <job id="ID00099" namespace="Genome" name="pileup_chr21" version="1.0" runtime="39.09">
+    <uses file="chr21.BSnull.bfa" link="input" size="33130923"/>
+    <uses file="chr21.nocontam.chr.map" link="input" size="2644"/>
+    <uses file="chr21.nocontam.chr.pileup" link="output" size="18800"/>
+  </job>
+  <!-- Representative dependencies (same pipeline chain as original) -->
+  <child ref="ID00001">
+    <parent ref="ID00000"/>
+  </child>
+  <child ref="ID00025">
+    <parent ref="ID00001"/>
+  </child>
+  <child ref="ID00049">
+    <parent ref="ID00025"/>
+  </child>
+  <child ref="ID00073">
+    <parent ref="ID00049"/>
+  </child>
+  <child ref="ID00097">
+    <parent ref="ID00073"/>
+  </child>
+  <child ref="ID00098">
+    <parent ref="ID00097"/>
+  </child>
+  <child ref="ID00099">
+    <parent ref="ID00098"/>
+  </child>
+</adag>

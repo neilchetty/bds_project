@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fast version of Avian Flu drug design workflow for rapid testing.
+     Same DAG structure as avianflu_small.xml but with ~163x runtime compression.
+     Original: prepare=120s, autogrid=240s, each autodock=1800s
+     Fast:     prepare=0.74s, autogrid=1.47s, each autodock=11.04s -->
+<adag name="avianflu_fast" jobCount="102" fileCount="0" childCount="101">
+	<job id="prepare" namespace="avianflu_fast" name="PrepareGPF" runtime="0.74" cores="1">
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="prepare_out.dat" link="output" size="6"/>
+	</job>
+	<job id="autogrid" namespace="avianflu_fast" name="AutoGrid" runtime="1.47" cores="1">
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="prepare_out.dat" link="input" size="6"/>
+		<uses file="autogrid_out.dat" link="output" size="1257"/>
+	</job>
+	<job id="autodock1" namespace="avianflu_fast" name="AutoDock" runtime="11.04" cores="1">
+		<uses file="autodock_1in1.dat" link="input" size="48249"/>
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="autodock_2in1.dat" link="input" size="314"/>
+		<uses file="autodock_out1.dat" link="output" size="1257"/>
+	</job>
+	<job id="autodock2" namespace="avianflu_fast" name="AutoDock" runtime="11.04" cores="1">
+		<uses file="autodock_1in2.dat" link="input" size="48249"/>
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="autodock_2in2.dat" link="input" size="314"/>
+		<uses file="autodock_out2.dat" link="output" size="1257"/>
+	</job>
+	<job id="autodock3" namespace="avianflu_fast" name="AutoDock" runtime="11.04" cores="1">
+		<uses file="autodock_1in3.dat" link="input" size="48249"/>
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="autodock_2in3.dat" link="input" size="314"/>
+		<uses file="autodock_out3.dat" link="output" size="1257"/>
+	</job>
+	<job id="autodock4" namespace="avianflu_fast" name="AutoDock" runtime="11.04" cores="1">
+		<uses file="autodock_1in4.dat" link="input" size="48249"/>
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="autodock_2in4.dat" link="input" size="314"/>
+		<uses file="autodock_out4.dat" link="output" size="1257"/>
+	</job>
+	<job id="autodock5" namespace="avianflu_fast" name="AutoDock" runtime="11.04" cores="1">
+		<uses file="autodock_1in5.dat" link="input" size="48249"/>
+		<uses file="input1.dat" link="input" size="943"/>
+		<uses file="autodock_2in5.dat" link="input" size="314"/>
+		<uses file="autodock_out5.dat" link="output" size="1257"/>
+	</job>
+	<!-- Note: Only 5 representative autodock jobs are shown in this fast DAX.
+	     The built-in WorkflowLibrary.avianfluSmallFast() generates all 100 tasks.
+	     This file exists as a reference for the DAG structure. -->
+	<child ref="autogrid">
+		<parent ref="prepare"/>
+	</child>
+	<child ref="autodock1">
+		<parent ref="autogrid"/>
+	</child>
+	<child ref="autodock2">
+		<parent ref="autogrid"/>
+	</child>
+	<child ref="autodock3">
+		<parent ref="autogrid"/>
+	</child>
+	<child ref="autodock4">
+		<parent ref="autogrid"/>
+	</child>
+	<child ref="autodock5">
+		<parent ref="autogrid"/>
+	</child>
+</adag>

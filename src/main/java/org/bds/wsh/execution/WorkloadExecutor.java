@@ -67,16 +67,27 @@ public final class WorkloadExecutor {
     }
 
     /**
+     * Time compression factor. The paper's workloads are huge (e.g., 1800s per task).
+     * To run real benchmarks in hours instead of days, we compress the actual
+     * Docker CPU/IO workload by 10x. The schedules still use the exact paper 
+     * values, so the algorithmic results and relative speedups are identical,
+     * it just executes faster.
+     */
+    private static final double TIME_COMPRESSION_FACTOR = 10.0;
+
+    /**
      * Builds a bash script producing real CPU + IO workload proportional
      * to the task's workloadSeconds and ioWeight.
      */
     String buildWorkloadScript(Task task) {
-        double totalSec = task.workloadSeconds();
+        double totalSec = task.workloadSeconds() / TIME_COMPRESSION_FACTOR;
         double ioW = task.ioWeight();
         double cpuW = 1.0 - ioW;
 
-        int cpuMb = clamp((int) Math.round(cpuW * totalSec * CPU_MB_PER_SECOND));
-        int ioMb  = clamp((int) Math.round(ioW * totalSec * IO_MB_PER_SECOND));
+        int cpuMbRaw = (int) Math.round(cpuW * totalSec * CPU_MB_PER_SECOND);
+        int ioMbRaw  = (int) Math.round(ioW * totalSec * IO_MB_PER_SECOND);
+        int cpuMb = cpuMbRaw > 0 ? clamp(cpuMbRaw) : 0;
+        int ioMb  = ioMbRaw  > 0 ? clamp(ioMbRaw)  : 0;
 
         StringBuilder s = new StringBuilder("set -e; ");
 

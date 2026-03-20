@@ -45,7 +45,7 @@ public final class WorkflowLibrary {
         tasks.add(task("prepare", 120.0, 151 * KB, List.of(), Map.of()));
         tasks.add(task("autogrid", 240.0, 351 * KB, List.of("prepare"),
                 Map.of("prepare", 100 * MB)));
-        for (int jobIndex = 1; jobIndex <= 102; jobIndex++) {
+        for (int jobIndex = 1; jobIndex <= 100; jobIndex++) {
             String taskId = String.format("autodock%03d", jobIndex);
             tasks.add(task(taskId, 1800.0, 7.75 * MB, List.of("autogrid"),
                     Map.of("autogrid", 200 * MB)));
@@ -57,8 +57,44 @@ public final class WorkflowLibrary {
         return layeredWorkflow("Epigenomics", 100, 2026L, 5, 12, 25.0, 240.0, 0.15, 0.60);
     }
 
+    /**
+     * Fast version of avianflu_small with same DAG structure (prepare→autogrid→100×autodock)
+     * but runtimes scaled to achieve ~1100-1200s total simulated makespan.
+     * Scaling factor: ~163x compression (1800s → 11s per autodock task).
+     */
+    public static Workflow avianfluSmallFast() {
+        double scale = 163.0;
+        List<Task> tasks = new ArrayList<>();
+        tasks.add(task("prepare", 120.0 / scale, 151 * KB / scale, List.of(), Map.of()));
+        tasks.add(task("autogrid", 240.0 / scale, 351 * KB / scale, List.of("prepare"),
+                Map.of("prepare", 100 * MB / scale)));
+        for (int jobIndex = 1; jobIndex <= 100; jobIndex++) {
+            String taskId = String.format("autodock%03d", jobIndex);
+            tasks.add(task(taskId, 1800.0 / scale, 7.75 * MB / scale, List.of("autogrid"),
+                    Map.of("autogrid", 200 * MB / scale)));
+        }
+        return new Workflow("Avianflu_fast", tasks);
+    }
+
+    /**
+     * Fast version of epigenomics with same layered DAG structure (100 tasks)
+     * but runtimes scaled to achieve ~1100-1200s total simulated makespan.
+     * Scaling factor: ~160x compression. Uses same seed for identical topology.
+     */
+    public static Workflow epigenomicsFast() {
+        double scale = 160.0;
+        return layeredWorkflow("Epigenomics_fast", 100, 2026L, 5, 12,
+                25.0 / scale, 240.0 / scale, 0.15, 0.60);
+    }
+
     public static List<Workflow> defaultWorkflows() {
         return List.of(gene2life(), avianfluSmall(), epigenomics());
+    }
+
+    /** All workflows including fast simulation variants. */
+    public static List<Workflow> allWorkflows() {
+        return List.of(gene2life(), avianfluSmall(), avianfluSmallFast(),
+                epigenomics(), epigenomicsFast());
     }
 
     private static Workflow layeredWorkflow(

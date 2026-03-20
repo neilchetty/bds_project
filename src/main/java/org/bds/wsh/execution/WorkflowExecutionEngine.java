@@ -86,7 +86,16 @@ public final class WorkflowExecutionEngine {
                     submitted.add(taskId);
                     Task task = workflow.tasks().get(taskId);
                     ScheduledTask scheduledTask = schedule.scheduledTasks().get(taskId);
+                    if (scheduledTask == null) {
+                        throw new IllegalStateException("Task " + taskId + " not found in schedule. "
+                                + "Available: " + schedule.scheduledTasks().keySet());
+                    }
                     Node targetNode = nodeMap.get(scheduledTask.nodeId());
+                    if (targetNode == null) {
+                        throw new IllegalStateException("Node " + scheduledTask.nodeId()
+                                + " for task " + taskId + " not found in node map. "
+                                + "Available: " + nodeMap.keySet());
+                    }
 
                     CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                         // Transfer predecessor data.
@@ -100,8 +109,13 @@ public final class WorkflowExecutionEngine {
                     waveFutures.add(future);
                 }
 
-                // Wait for all tasks in this wave.
-                CompletableFuture.allOf(waveFutures.toArray(new CompletableFuture[0])).join();
+                // Wait for all tasks in this wave; unwrap CompletionException for clarity.
+                try {
+                    CompletableFuture.allOf(waveFutures.toArray(new CompletableFuture[0])).join();
+                } catch (java.util.concurrent.CompletionException ce) {
+                    Throwable cause = ce.getCause() != null ? ce.getCause() : ce;
+                    throw new RuntimeException("Task execution failed: " + cause.getMessage(), cause);
+                }
 
                 // Find next wave: only process NEWLY completed tasks (not previously processed).
                 readyTasks = new ArrayList<>();
