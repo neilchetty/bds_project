@@ -48,7 +48,7 @@ bds_project/
 │   ├── build.ps1                      # Compile Java project
 │   ├── run-tests.ps1                  # Run unit tests
 │   ├── run-quick-test.ps1             # Quick smoke test (Gene2life)
-│   ├── run-real-benchmark.ps1         # Full HEFT vs WSH comparison
+│   ├── run-real-benchmark.ps1         # Full HEFT vs WSH comparison (fast by default)
 │   ├── start-single-machine.ps1       # Start 28 containers locally
 │   ├── start-multi-machine.ps1        # Start C1 tier on main PC
 │   ├── stop-all-containers.ps1        # Stop all containers
@@ -227,8 +227,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
 # Quick test
 java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config\cluster\multi-machine-nodes.csv --output results\multi-gene2life.csv
 
-# Full benchmark
+# Full benchmark (default: fast workflows — Gene2life + Avianflu_fast + Epigenomics_fast)
 powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1
+
+# Full benchmark with original slow workflows (WARNING: takes many hours)
+powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1 -SlowWorkflows
 ```
 
 ---
@@ -256,6 +259,13 @@ java -jar build\wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH -
 Compares WSH vs HEFT across multiple node configurations.
 
 ```powershell
+# Using fast workflows (recommended — finishes in ~30 min)
+java -jar build\wsh-scheduler.jar real-benchmark --fast --node-counts 4,7,10,13,16,20,24,28 --output results\real-metrics.csv --details-dir results\real-executions
+
+# Or via the script (uses --fast by default)
+powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1
+
+# Using original slow workflows (not recommended unless necessary)
 java -jar build\wsh-scheduler.jar real-benchmark --node-counts 4,7,10,13,16,20,24,28 --output results\real-metrics.csv --details-dir results\real-executions
 ```
 
@@ -329,6 +339,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run-bigdata-gene2life.ps1 -Ph
 | `--nodes-file` | Path to node CSV | Paper-faithful cluster |
 | `--output` | Output CSV path | `results/metrics.csv` |
 | `--training-file` | Training profile CSV | None (static model) |
+| `--fast` | Use fast workflow variants *(real-benchmark only)* | Off (uses original workflows) |
 
 ### Available Workflows
 
