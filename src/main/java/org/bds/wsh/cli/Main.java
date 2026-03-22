@@ -143,9 +143,20 @@ public final class Main {
         Path trainingFile = optionPath(args, "--training-file");
         String workflowFiles = optionValue(args, "--workflow-files", null);
         String nodeCountsStr = optionValue(args, "--node-counts", "4,7,10,13,16,20,24,28");
+        boolean useFast = hasFlag(args, "--fast");
 
         RuntimeModel rm = runtimeModel(trainingFile);
-        List<Workflow> wfs = workflows(workflowFiles);
+        List<Workflow> wfs;
+        if (workflowFiles != null) {
+            wfs = workflows(workflowFiles);
+        } else if (useFast) {
+            // Fast variants: same DAG topology, ~163x/160x compressed runtimes (~1100s each)
+            wfs = List.of(WorkflowLibrary.gene2life(),
+                          WorkflowLibrary.avianfluSmallFast(),
+                          WorkflowLibrary.epigenomicsFast());
+        } else {
+            wfs = WorkflowLibrary.defaultWorkflows();
+        }
 
         // Build node configurations for each requested count.
         int[] nodeCounts = parseNodeCounts(nodeCountsStr);
@@ -228,6 +239,13 @@ public final class Main {
     private static Path optionPath(String[] args, String name) {
         String value = optionValue(args, name, null);
         return value == null ? null : Path.of(value);
+    }
+
+    private static boolean hasFlag(String[] args, String name) {
+        for (String arg : args) {
+            if (arg.equalsIgnoreCase(name)) return true;
+        }
+        return false;
     }
 
     private static int[] parseNodeCounts(String raw) {

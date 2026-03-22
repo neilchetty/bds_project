@@ -140,10 +140,15 @@ java -jar build\wsh-scheduler.jar execute --workflow Epigenomics_fast --algorith
 ### Step 7: Run Full Real-World Benchmark (HEFT vs WSH)
 
 ```powershell
+# Default: fast workflows only (Gene2life + Avianflu_fast + Epigenomics_fast)
 powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1
+
+# To run original workflows (WARNING: takes many hours)
+powershell -ExecutionPolicy Bypass -File .\scripts\run-real-benchmark.ps1 -SlowWorkflows
 ```
 
-Runs all workflows with both algorithms across node counts 4,7,10,13,16,20,24,28.
+This runs HEFT vs WSH across all 8 node counts (4, 7, 10, 13, 16, 20, 24, 28) and produces a comparison table.
+
 
 ### Step 8: Stop Containers When Done
 
