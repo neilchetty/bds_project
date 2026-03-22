@@ -54,7 +54,7 @@ public final class WorkflowLibrary {
     }
 
     public static Workflow epigenomics() {
-        return layeredWorkflow("Epigenomics", 100, 2026L, 5, 12, 25.0, 240.0, 0.15, 0.60);
+        return layeredWorkflow("Epigenomics", 100, 2026L, 5, 12, 25.0, 240.0, 0.15, 0.60, 1.0);
     }
 
     /**
@@ -84,7 +84,7 @@ public final class WorkflowLibrary {
     public static Workflow epigenomicsFast() {
         double scale = 160.0;
         return layeredWorkflow("Epigenomics_fast", 100, 2026L, 5, 12,
-                25.0 / scale, 240.0 / scale, 0.15, 0.60);
+                25.0 / scale, 240.0 / scale, 0.15, 0.60, scale);
     }
 
     public static List<Workflow> defaultWorkflows() {
@@ -106,7 +106,8 @@ public final class WorkflowLibrary {
             double minWorkload,
             double maxWorkload,
             double minIo,
-            double maxIo
+            double maxIo,
+            double edgeDataScale
     ) {
         Random random = new Random(seed);
         List<Task> tasks = new ArrayList<>();
@@ -135,7 +136,7 @@ public final class WorkflowLibrary {
                     }
                     predecessors.sort(Comparator.naturalOrder());
                     for (String pred : predecessors) {
-                        double edgeBytes = (50.0 + random.nextDouble() * 450.0) * MB;
+                        double edgeBytes = (50.0 + random.nextDouble() * 450.0) * MB / edgeDataScale;
                         edgeData.put(pred, edgeBytes);
                     }
                 }
