@@ -142,12 +142,16 @@ public final class Main {
         Path detailsDir = Path.of(optionValue(args, "--details-dir", "results/real-executions"));
         Path trainingFile = optionPath(args, "--training-file");
         String workflowFiles = optionValue(args, "--workflow-files", null);
+        String workflowFilter = optionValue(args, "--workflow", null);
         String nodeCountsStr = optionValue(args, "--node-counts", "4,7,10,13,16,20,24,28");
         boolean useFast = hasFlag(args, "--fast");
 
         RuntimeModel rm = runtimeModel(trainingFile);
         List<Workflow> wfs;
-        if (workflowFiles != null) {
+        if (workflowFilter != null) {
+            // Single workflow mode: run only the specified workflow.
+            wfs = List.of(workflowByName(workflowFilter));
+        } else if (workflowFiles != null) {
             wfs = workflows(workflowFiles);
         } else if (useFast) {
             // Fast variants: same DAG topology, ~163x/160x compressed runtimes (~1100s each)
