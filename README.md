@@ -423,3 +423,10 @@ Results are saved to the `results/` directory:
 - `schedules/` — Per-workflow schedule CSVs
 - `real-executions/` — Per-run execution detail CSVs
 - `bigdata-gene2life-*.csv` — Big data pipeline results
+
+
+## Setup Multi Computers
+```powershell
+# Run as Administrator (Power Shell)
+Set-ExecutionPolicy -Scope Process Bypass .\scripts\docker-inbound.ps1
+```
