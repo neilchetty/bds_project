@@ -45,15 +45,17 @@ if (-not $dockerListening) {
     Write-Warning "No local listener detected on port $Port. Make sure Docker Desktop has 'Expose daemon on tcp://localhost:2375 without TLS' enabled."
 }
 
-# Remove old rule for same listen address/port if it exists
-cmd /c "netsh interface portproxy delete v4tov4 listenaddress=$ListenIP listenport=$Port" | Out-Null
+# Remove old rules for same listen address/port if they exist
+cmd /c "netsh interface portproxy delete v4tov4 listenaddress=$ListenIP listenport=$Port" 2>$null | Out-Null
+cmd /c "netsh interface portproxy delete v4tov4 listenaddress=$ListenIP listenport=9866" 2>$null | Out-Null
 
-# Add port proxy: LAN_IP:2375 -> 127.0.0.1:2375
+# Add port proxy: LAN_IP:PORT -> 127.0.0.1:PORT
 cmd /c "netsh interface portproxy add v4tov4 listenaddress=$ListenIP listenport=$Port connectaddress=127.0.0.1 connectport=$Port"
+cmd /c "netsh interface portproxy add v4tov4 listenaddress=$ListenIP listenport=9866 connectaddress=127.0.0.1 connectport=9866"
 
 # Recreate firewall rule cleanly
-cmd /c "netsh advfirewall firewall delete rule name=""$RuleName""" | Out-Null
-cmd /c "netsh advfirewall firewall add rule name=""$RuleName"" dir=in action=allow protocol=TCP localport=$Port"
+cmd /c "netsh advfirewall firewall delete rule name=""$RuleName""" 2>$null | Out-Null
+cmd /c "netsh advfirewall firewall add rule name=""$RuleName"" dir=in action=allow protocol=TCP localport=$Port,9866"
 
 Write-Host ""
 Write-Host "Portproxy status:"

@@ -86,18 +86,18 @@ foreach ($file in $files) {
         if ($first) {
             # Write FASTA header first.
             docker exec $container bash -c "echo '>synthetic_genome_sequence_database' > $tmpFile; dd if=/dev/urandom bs=1M count=$currentChunk status=none | base64 >> $tmpFile" 2>$null
-            docker cp "${container}:${tmpFile}" $filePath 2>$null
+            docker cp "${container}:${tmpFile}" $filePath 2>&1 | Out-Null
             $first = $false
         } else {
             docker exec $container bash -c "dd if=/dev/urandom bs=1M count=$currentChunk status=none | base64 > $tmpFile" 2>$null
             # Append to existing file via docker cp to temp then append.
             $tempLocal = Join-Path $DataDir "temp_chunk.bin"
-            docker cp "${container}:${tmpFile}" $tempLocal 2>$null
+            docker cp "${container}:${tmpFile}" $tempLocal 2>&1 | Out-Null
             Get-Content $tempLocal -Raw | Add-Content $filePath
             Remove-Item $tempLocal -ErrorAction SilentlyContinue
         }
 
-        docker exec $container rm -f $tmpFile 2>$null
+        docker exec $container rm -f $tmpFile 2>&1 | Out-Null
     }
 
     $finalSize = (Get-Item $filePath).Length
