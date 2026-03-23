@@ -1,8 +1,8 @@
 node_id,cluster_id,cpu_factor,io_factor,ram_mb,container_name,docker_host
 C1-node1,C1,4.0,2.5,4096,worker-c1-1,
 C1-node2,C1,4.0,2.5,4096,worker-c1-2,
-C2-node1,C2,2.0,1.5,2048,worker-c2-1,
-C2-node2,C2,2.0,1.5,2048,worker-c2-2,
-C3-node1,C3,1.0,1.0,1024,worker-c3-1,
-C3-node2,C3,1.0,1.0,1024,worker-c3-2,
-C4-node1,C4,0.5,0.6,512,worker-c4-1,
+C2-node1,C2,2.0,1.5,2048,worker-c2-1,tcp://172.16.45.108:2375
+C2-node2,C2,2.0,1.5,2048,worker-c2-2,tcp://172.16.45.108:2375
+C3-node1,C3,1.0,1.0,1024,worker-c3-1,tcp://172.16.72.63:2375
+C3-node2,C3,1.0,1.0,1024,worker-c3-2,tcp://172.16.72.63:2375
+C4-node1,C4,0.5,0.6,512,worker-c4-1,tcp://172.16.72.29:2375
