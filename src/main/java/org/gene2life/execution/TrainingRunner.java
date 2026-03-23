@@ -17,9 +17,13 @@ import java.util.Map;
 
 public final class TrainingRunner {
     private final Map<JobId, TaskExecutor> executors;
+    private final ExecutionMode executionMode;
+    private final DockerNodePool dockerNodePool;
 
-    public TrainingRunner(Map<JobId, TaskExecutor> executors) {
+    public TrainingRunner(Map<JobId, TaskExecutor> executors, ExecutionMode executionMode, DockerNodePool dockerNodePool) {
         this.executors = executors;
+        this.executionMode = executionMode;
+        this.dockerNodePool = dockerNodePool;
     }
 
     public TrainingBenchmarks benchmark(Path dataRoot, List<ClusterProfile> clusters) throws Exception {
@@ -31,11 +35,14 @@ public final class TrainingRunner {
             for (JobId jobId : JobId.values()) {
                 Path outputDir = dataRoot.resolve("training/generated").resolve(jobId.cliName());
                 Files.createDirectories(outputDir);
-                long start = System.currentTimeMillis();
-                TaskResult result = executors.get(jobId).execute(new TaskInputs(
+                TaskInputs inputs = new TaskInputs(
                         WorkflowExecutor.trainingPrimaryInput(dataRoot, jobId),
                         WorkflowExecutor.trainingSecondaryInput(dataRoot, jobId),
-                        outputDir), node);
+                        outputDir);
+                long start = System.currentTimeMillis();
+                TaskResult result = executionMode == ExecutionMode.DOCKER
+                        ? dockerNodePool.execute(node, jobId, inputs)
+                        : executors.get(jobId).execute(inputs, node);
                 long finish = System.currentTimeMillis();
                 durations.computeIfAbsent(jobId, ignored -> new HashMap<>()).put(cluster.clusterId(), Math.max(1L, finish - start));
                 mirrorTrainingOutput(jobId, result.outputPath(), dataRoot);

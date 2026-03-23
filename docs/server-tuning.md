@@ -11,10 +11,12 @@ This tuning guide targets the reported Ubuntu 24.04 workstation:
 ## Recommended Defaults
 
 - Use [clusters-z4-g5.csv](/Users/neilchetty/Downloads/linux_bds/config/clusters-z4-g5.csv) on this host.
+- Use [clusters-z4-g5-paper-sweep.csv](/Users/neilchetty/Downloads/linux_bds/config/clusters-z4-g5-paper-sweep.csv) when you want 12 logical nodes and paper-style node-count sweeps.
 - Run benchmark workloads on local disk, not over a network mount.
 - Start with:
   - `PROFILE=medium`
   - `GENE2LIFE_JAVA_OPTS="-Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication"`
+  - `EXECUTOR=docker`
 
 ## Why This Cluster Layout
 
@@ -49,6 +51,8 @@ Run the tuned benchmark:
 chmod +x ./scripts/server-benchmark.sh
 PROFILE=medium \
 CLUSTER_CONFIG=./config/clusters-z4-g5.csv \
+COMPARE_ROUNDS=4 \
+EXECUTOR=docker \
 ./scripts/server-benchmark.sh
 ```
 
@@ -58,7 +62,21 @@ Run a larger experiment:
 PROFILE=large \
 GENE2LIFE_JAVA_OPTS="-Xms6g -Xmx24g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication" \
 WORKSPACE=/data/gene2life-large \
+EXECUTOR=docker \
 ./scripts/server-benchmark.sh
+```
+
+Sweep node counts on the same server:
+
+```bash
+for nodes in 4 7 10 12; do
+  WORKSPACE="/data/gene2life-nodes-${nodes}" \
+  CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
+  MAX_NODES="$nodes" \
+  COMPARE_ROUNDS=4 \
+  EXECUTOR=docker \
+  ./scripts/server-benchmark.sh
+done
 ```
 
 ## Practical Notes
@@ -67,3 +85,6 @@ WORKSPACE=/data/gene2life-large \
 - If CPU is underutilized, increase dataset size first before increasing heap.
 - If BLAST stages dominate wall time, keep the larger thread counts in `C1` and `C2`.
 - If IO becomes the bottleneck, keep the workspace on the fastest local volume and keep the larger `io_buffer_kb` values for `C1` and `C2`.
+- On one server, never trust a single `WSH` then `HEFT` back-to-back run. Alternate order across rounds and compare averages across rounds.
+- Build the container image directly with `./scripts/build-image.sh` if you want to validate the Docker environment before running a full benchmark.
+- In Docker mode, each logical node is a persistent named container for one scheduler run, and jobs execute inside it with `docker exec`.

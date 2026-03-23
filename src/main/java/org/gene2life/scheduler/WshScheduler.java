@@ -46,6 +46,11 @@ public final class WshScheduler implements Scheduler {
             if (activated < cluster.nodes().size() && cluster.nodes().get(activated).nodeId().equals(best.node.nodeId())) {
                 activatedNodesPerCluster.put(cluster.clusterId(), activated + 1);
             }
+            if (isLastNodeOfLastCluster(best.node, sortedClusters, clusters)) {
+                for (ClusterProfile item : clusters) {
+                    activatedNodesPerCluster.put(item.clusterId(), item.nodes().size());
+                }
+            }
             plan.add(new PlanAssignment(
                     job.id(),
                     best.node.clusterId(),
@@ -88,6 +93,18 @@ public final class WshScheduler implements Scheduler {
 
     private long maxDependencyFinish(JobDefinition job, Map<JobId, Long> jobFinish) {
         return job.dependencies().stream().mapToLong(dep -> jobFinish.getOrDefault(dep, 0L)).max().orElse(0L);
+    }
+
+    private boolean isLastNodeOfLastCluster(NodeProfile node, List<String> sortedClusterIds, List<ClusterProfile> clusters) {
+        if (sortedClusterIds.isEmpty()) {
+            return false;
+        }
+        String lastClusterId = sortedClusterIds.get(sortedClusterIds.size() - 1);
+        if (!lastClusterId.equals(node.clusterId())) {
+            return false;
+        }
+        ClusterProfile cluster = clusters.stream().filter(item -> item.clusterId().equals(lastClusterId)).findFirst().orElseThrow();
+        return cluster.nodes().get(cluster.nodes().size() - 1).nodeId().equals(node.nodeId());
     }
 
     private Map<JobId, Double> computeUpwardRanks(WorkflowDefinition workflow, TrainingBenchmarks benchmarks) {

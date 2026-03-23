@@ -28,7 +28,17 @@ public final class TrainingBenchmarks {
         return classifications.getOrDefault(jobId, "compute");
     }
 
+    public boolean hasMeasurements(JobId jobId) {
+        return durationsByJobAndCluster.containsKey(jobId) && !durationsByJobAndCluster.get(jobId).isEmpty();
+    }
+
     public List<String> sortedClusters(JobId jobId, List<ClusterProfile> clusters) {
+        if (!hasMeasurements(jobId)) {
+            return clusters.stream()
+                    .sorted((left, right) -> Integer.compare(right.maxCpuThreads(), left.maxCpuThreads()))
+                    .map(ClusterProfile::clusterId)
+                    .toList();
+        }
         return clusters.stream()
                 .sorted((left, right) -> {
                     long leftDuration = duration(jobId, left.clusterId());

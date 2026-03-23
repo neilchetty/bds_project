@@ -19,4 +19,13 @@ public enum JobId {
     public String cliName() {
         return cliName;
     }
+
+    public static JobId fromCliName(String value) {
+        for (JobId jobId : values()) {
+            if (jobId.cliName.equalsIgnoreCase(value)) {
+                return jobId;
+            }
+        }
+        throw new IllegalArgumentException("Unknown job id: " + value);
+    }
 }

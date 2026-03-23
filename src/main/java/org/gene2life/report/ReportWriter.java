@@ -115,7 +115,7 @@ public final class ReportWriter {
             for (JobDefinition job : workflow.jobs()) {
                 writer.write("- " + job.id().cliName() + ": ");
                 writer.write(plan.stream().filter(item -> item.jobId() == job.id()).findFirst().map(PlanAssignment::classification).orElse("compute"));
-                writer.write(" intensive; cluster order = ");
+                writer.write(benchmarks.hasMeasurements(job.id()) ? " intensive; cluster order = " : " intensive; cluster order (static) = ");
                 writer.write(String.join(" > ", benchmarks.sortedClusters(job.id(), clusters)));
                 writer.newLine();
             }

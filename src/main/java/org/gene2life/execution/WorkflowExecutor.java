@@ -25,13 +25,18 @@ public final class WorkflowExecutor {
     private final Map<JobId, TaskExecutor> executors;
     private final Map<String, NodeRuntime> runtimes;
 
-    public WorkflowExecutor(WorkflowDefinition workflow, Map<JobId, TaskExecutor> executors, List<ClusterProfile> clusters) {
+    public WorkflowExecutor(
+            WorkflowDefinition workflow,
+            Map<JobId, TaskExecutor> executors,
+            List<ClusterProfile> clusters,
+            ExecutionMode executionMode,
+            DockerNodePool dockerNodePool) {
         this.workflow = workflow;
         this.executors = executors;
         this.runtimes = new HashMap<>();
         for (ClusterProfile cluster : clusters) {
             for (NodeProfile node : cluster.nodes()) {
-                runtimes.put(node.nodeId(), new NodeRuntime(node));
+                runtimes.put(node.nodeId(), new NodeRuntime(node, executionMode, dockerNodePool));
             }
         }
     }

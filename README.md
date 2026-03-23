@@ -21,8 +21,10 @@ The implementation keeps the paper's job names and dependencies, but runs real f
 - `config/clusters-paper.csv`: four-cluster profile matching the paper's relative heterogeneity.
 - `config/clusters-server.csv`: a server-oriented default profile for your Ubuntu host.
 - `config/clusters-z4-g5.csv`: tuned profile for the reported Ubuntu Z4 G5 workstation.
+- `config/clusters-z4-g5-paper-sweep.csv`: tuned 12-node profile for paper-style node-count sweeps on the Ubuntu host.
 - `scripts/build.sh`: compile with plain `javac`.
 - `scripts/run.sh`: run the CLI.
+- `scripts/build-image.sh`: build the Docker image used for isolated logical-node execution.
 - `scripts/generate-cluster-config.sh`: generate a cluster CSV from the current server.
 - `scripts/server-benchmark.sh`: run a tuned server-side comparison.
 
@@ -120,6 +122,8 @@ Run with the tuned Z4 G5 profile and explicit JVM settings:
 PROFILE=medium \
 CLUSTER_CONFIG=./config/clusters-z4-g5.csv \
 GENE2LIFE_JAVA_OPTS="-Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication" \
+COMPARE_ROUNDS=4 \
+EXECUTOR=docker \
 ./scripts/server-benchmark.sh
 ```
 
@@ -132,13 +136,30 @@ chmod +x ./scripts/generate-cluster-config.sh
 
 Detailed server guidance is in `docs/server-tuning.md`.
 
-## Docker
+For a fairer comparison on one physical server, `compare` now alternates scheduler order across rounds instead of always running WSH first and HEFT second. This reduces JIT and filesystem-cache bias.
 
-The repository includes a `Dockerfile` for packaging the CLI once the classes are built:
+Docker isolation is now built into the execution path: each WSH training job and each scheduled workflow job can run in a constrained container representing the assigned logical node.
+In Docker mode, each logical node is now a persistent named container for the lifetime of one scheduler run, and jobs execute inside it with `docker exec`.
+
+To get closer to the paper's node-count experiments on the same machine, use:
 
 ```bash
-./scripts/build.sh
-docker build -t gene2life-java .
+for nodes in 4 7 10 12; do
+  WORKSPACE="/data/gene2life-nodes-${nodes}" \
+  CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
+  MAX_NODES="$nodes" \
+  COMPARE_ROUNDS=4 \
+  EXECUTOR=docker \
+  ./scripts/server-benchmark.sh
+done
+```
+
+## Docker
+
+The repository includes a `Dockerfile` and image-build helper for packaging the CLI once the classes are built:
+
+```bash
+./scripts/build-image.sh gene2life-java:latest
 ```
 
 Example run:
@@ -151,7 +172,7 @@ docker run --rm -v "$PWD/work:/work" gene2life-java run \
   --scheduler wsh
 ```
 
-If you want per-node container isolation later, the current scheduler and task boundaries are already separated cleanly enough to move each logical node into its own container process.
+The server benchmark script uses this image to execute node-isolated jobs automatically when `EXECUTOR=docker`.
 
 ## Paper Mapping Notes
 
