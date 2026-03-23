@@ -1,0 +1,9 @@
+task_id,node_id,cluster_id,start_seconds,finish_seconds
+Blast1,C1-node1,C1,0.00000,46.35000
+Blast2,C2-node1,C2,0.00000,91.50000
+Clustalw1,C1-node1,C1,46.35000,123.60000
+Clustalw2,C1-node1,C1,123.60000,200.85000
+Dnapars,C2-node1,C2,123.60000,138.85000
+Protpars,C1-node1,C1,200.85000,208.57500
+Drawgram1,C2-node1,C2,138.85000,154.10000
+Drawgram2,C1-node1,C1,208.57500,216.30000

@@ -1,0 +1,2 @@
+﻿cluster_id,container_name,cpu_training_seconds,io_training_seconds
+C1,wsh-nodemanager-c1,1.0,2.0
