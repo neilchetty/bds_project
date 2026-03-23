@@ -24,7 +24,7 @@ public final class ClusterConfigLoader {
                 continue;
             }
             String[] parts = line.split(",");
-            if (parts.length != 5) {
+            if (parts.length != 5 && parts.length != 6) {
                 throw new IllegalArgumentException("Invalid cluster config line: " + line);
             }
             NodeProfile profile = new NodeProfile(
@@ -32,7 +32,8 @@ public final class ClusterConfigLoader {
                     parts[1].trim(),
                     Integer.parseInt(parts[2].trim()),
                     Integer.parseInt(parts[3].trim()),
-                    Integer.parseInt(parts[4].trim()));
+                    Integer.parseInt(parts[4].trim()),
+                    parts.length == 6 ? parts[5].trim() : "");
             byCluster.computeIfAbsent(profile.clusterId(), ignored -> new ArrayList<>()).add(profile);
         }
         return byCluster.entrySet().stream()

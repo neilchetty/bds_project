@@ -58,18 +58,27 @@ BUFFER_4=1024
 
 {
   echo "# auto-generated from host resources"
-  echo "# cluster_id,node_id,cpu_threads,io_buffer_kb,memory_mb"
+  echo "# cluster_id,node_id,cpu_threads,io_buffer_kb,memory_mb,cpu_set"
+  next_cpu=0
   for i in $(seq 1 "$NODES_PER_CLUSTER"); do
-    echo "C1,c1-n${i},${PER_NODE_THREADS_1},${BUFFER_1},${PER_NODE_MEM_1}"
+    end_cpu=$(( next_cpu + PER_NODE_THREADS_1 - 1 ))
+    echo "C1,c1-n${i},${PER_NODE_THREADS_1},${BUFFER_1},${PER_NODE_MEM_1},${next_cpu}-${end_cpu}"
+    next_cpu=$(( end_cpu + 1 ))
   done
   for i in $(seq 1 "$NODES_PER_CLUSTER"); do
-    echo "C2,c2-n${i},${PER_NODE_THREADS_2},${BUFFER_2},${PER_NODE_MEM_2}"
+    end_cpu=$(( next_cpu + PER_NODE_THREADS_2 - 1 ))
+    echo "C2,c2-n${i},${PER_NODE_THREADS_2},${BUFFER_2},${PER_NODE_MEM_2},${next_cpu}-${end_cpu}"
+    next_cpu=$(( end_cpu + 1 ))
   done
   for i in $(seq 1 "$NODES_PER_CLUSTER"); do
-    echo "C3,c3-n${i},${PER_NODE_THREADS_3},${BUFFER_3},${PER_NODE_MEM_3}"
+    end_cpu=$(( next_cpu + PER_NODE_THREADS_3 - 1 ))
+    echo "C3,c3-n${i},${PER_NODE_THREADS_3},${BUFFER_3},${PER_NODE_MEM_3},${next_cpu}-${end_cpu}"
+    next_cpu=$(( end_cpu + 1 ))
   done
   for i in $(seq 1 "$NODES_PER_CLUSTER"); do
-    echo "C4,c4-n${i},${PER_NODE_THREADS_4},${BUFFER_4},${PER_NODE_MEM_4}"
+    end_cpu=$(( next_cpu + PER_NODE_THREADS_4 - 1 ))
+    echo "C4,c4-n${i},${PER_NODE_THREADS_4},${BUFFER_4},${PER_NODE_MEM_4},${next_cpu}-${end_cpu}"
+    next_cpu=$(( end_cpu + 1 ))
   done
 } > "$OUTPUT_PATH"
 

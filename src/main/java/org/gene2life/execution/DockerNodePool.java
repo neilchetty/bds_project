@@ -90,16 +90,26 @@ public final class DockerNodePool implements AutoCloseable {
 
     private void startContainer(String containerName, NodeProfile nodeProfile) throws IOException, InterruptedException {
         List<String> command = List.of(
-                "docker", "run", "-d", "--rm",
-                "--name", containerName,
-                "--cpus", Integer.toString(nodeProfile.cpuThreads()),
-                "--memory", nodeProfile.memoryMb() + "m",
-                "-v", mountRoot.toString() + ":" + mountRoot.toString(),
-                "--entrypoint", "sh",
-                dockerImage,
-                "-lc",
-                "while true; do sleep 3600; done");
-        Process process = new ProcessBuilder(command)
+                "docker", "run", "-d", "--rm");
+        java.util.ArrayList<String> mutableCommand = new java.util.ArrayList<>(command);
+        mutableCommand.add("--name");
+        mutableCommand.add(containerName);
+        mutableCommand.add("--cpus");
+        mutableCommand.add(Integer.toString(nodeProfile.cpuThreads()));
+        if (nodeProfile.hasDedicatedCpuSet()) {
+            mutableCommand.add("--cpuset-cpus");
+            mutableCommand.add(nodeProfile.cpuSet());
+        }
+        mutableCommand.add("--memory");
+        mutableCommand.add(nodeProfile.memoryMb() + "m");
+        mutableCommand.add("-v");
+        mutableCommand.add(mountRoot.toString() + ":" + mountRoot.toString());
+        mutableCommand.add("--entrypoint");
+        mutableCommand.add("sh");
+        mutableCommand.add(dockerImage);
+        mutableCommand.add("-lc");
+        mutableCommand.add("while true; do sleep 3600; done");
+        Process process = new ProcessBuilder(mutableCommand)
                 .redirectErrorStream(true)
                 .start();
         byte[] combined = process.getInputStream().readAllBytes();
