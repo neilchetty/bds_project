@@ -29,12 +29,12 @@ $Root = Split-Path -Parent $PSScriptRoot
 $ScriptsDir = $PSScriptRoot
 
 Write-Host ""
-Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Gene2life Big Data Pipeline (multi-machine, ${SizeGB}GB) ║" -ForegroundColor Cyan
-Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "========================================================" -ForegroundColor Cyan
+Write-Host "  Gene2life Big Data Pipeline (multi-machine, ${SizeGB}GB)" -ForegroundColor Cyan
+Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Step 1: Ensure Docker worker containers are running ─────────────────
+# -- Step 1: Ensure Docker worker containers are running
 Write-Host "[Step 1/5] Checking Docker containers..." -ForegroundColor Yellow
 $workers = docker ps --format "{{.Names}}" | Where-Object { $_ -match "^worker-c" }
 $workerCount = ($workers | Measure-Object).Count
@@ -46,7 +46,7 @@ if ($workerCount -lt 4) {
     Write-Host "  [OK] $workerCount worker containers running" -ForegroundColor Green
 }
 
-# ── Step 2: Ensure Hadoop HDFS is running ───────────────────────────────
+# -- Step 2: Ensure Hadoop HDFS is running
 Write-Host ""
 Write-Host "[Step 2/5] Checking Hadoop HDFS..." -ForegroundColor Yellow
 $namenode = docker ps --format "{{.Names}}" | Where-Object { $_ -eq "hadoop-namenode" }
@@ -57,7 +57,7 @@ if (-not $namenode) {
     Write-Host "  [OK] Hadoop NameNode running" -ForegroundColor Green
 }
 
-# ── Step 3: Generate data ──────────────────────────────────────────────
+# -- Step 3: Generate data
 Write-Host ""
 Write-Host "[Step 3/5] Generating synthetic data ($SizeGB GB)..." -ForegroundColor Yellow
 $DataDir = Join-Path $Root "bigdata"
@@ -72,12 +72,12 @@ if ($existingSize -ge ($targetBytes * 0.90)) {
     & (Join-Path $ScriptsDir "generate-bigdata.ps1") -SizeGB $SizeGB
 }
 
-# ── Step 4: Upload to HDFS ─────────────────────────────────────────────
+# -- Step 4: Upload to HDFS
 Write-Host ""
 Write-Host "[Step 4/5] Uploading data to HDFS..." -ForegroundColor Yellow
 & (Join-Path $ScriptsDir "upload-to-hdfs.ps1")
 
-# ── Step 5: Build and Run Gene2life Benchmark ──────────────────────────
+# -- Step 5: Build and Run Gene2life Benchmark
 Write-Host ""
 Write-Host "[Step 5/5] Running Gene2life benchmark..." -ForegroundColor Yellow
 
@@ -113,14 +113,13 @@ $heftArgs = @(
 )
 java @heftArgs
 
-# ── Results ────────────────────────────────────────────────────────────
+# -- Results
 Write-Host ""
-Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  Big Data Pipeline Complete!                            ║" -ForegroundColor Green
-Write-Host "╠══════════════════════════════════════════════════════════╣" -ForegroundColor Green
-Write-Host "║  Results:                                               ║" -ForegroundColor Green
-Write-Host "║    WSH:  results\bigdata-gene2life-wsh.csv              ║" -ForegroundColor Green
-Write-Host "║    HEFT: results\bigdata-gene2life-heft.csv             ║" -ForegroundColor Green
-Write-Host "║  HDFS:   http://localhost:9870                          ║" -ForegroundColor Green
-Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "========================================================" -ForegroundColor Green
+Write-Host "  Big Data Pipeline Complete!" -ForegroundColor Green
+Write-Host "  Results:" -ForegroundColor Green
+Write-Host "    WSH:  results\bigdata-gene2life-wsh.csv" -ForegroundColor Green
+Write-Host "    HEFT: results\bigdata-gene2life-heft.csv" -ForegroundColor Green
+Write-Host "    HDFS: http://localhost:9870" -ForegroundColor Green
+Write-Host "========================================================" -ForegroundColor Green
 Write-Host ""

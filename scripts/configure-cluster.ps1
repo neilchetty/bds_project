@@ -63,12 +63,6 @@ $csvContent = Get-Content $NodesCsv -Raw
 $csvContent = $csvContent -replace "REPLACE_PC2_IP", $pc2Ip
 $csvContent = $csvContent -replace "REPLACE_PC3_IP", $pc3Ip
 $csvContent = $csvContent -replace "REPLACE_PC4_IP", $pc4Ip
-# Also replace any previously configured IPs back (for re-runs).
-$csvContent = $csvContent -replace "tcp://[0-9.]+:2375", {
-    $line = $_.Value
-    # Keep the format, just update based on cluster tier.
-    $line
-}
 Set-Content $NodesCsv -Value $csvContent
 
 Write-Host "[OK] Updated multi-machine-nodes.csv" -ForegroundColor Green
