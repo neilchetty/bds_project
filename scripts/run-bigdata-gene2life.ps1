@@ -6,9 +6,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Assert-Admin {
+    $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    if (-not $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw "This script configures Windows Firewall and Port Proxies for HDFS. You MUST run it in an Administrator PowerShell window."
+    }
+}
+
+Assert-Admin
+
 <#
 .SYNOPSIS
     Orchestrates the full big data pipeline for Gene2life on HDFS.
+
 .DESCRIPTION
     Complete end-to-end pipeline:
       1. Ensure Hadoop HDFS is running (or set it up)
@@ -46,15 +56,35 @@ if ($workerCount -lt 4) {
     Write-Host "  [OK] $workerCount worker containers running" -ForegroundColor Green
 }
 
-# -- Step 2: Ensure Hadoop HDFS is running
+# -- Step 2: Ensure Hadoop HDFS is running WITH DataNodes
 Write-Host ""
 Write-Host "[Step 2/5] Checking Hadoop HDFS..." -ForegroundColor Yellow
 $namenode = docker ps --format "{{.Names}}" | Where-Object { $_ -eq "hadoop-namenode" }
+$needSetup = $false
+
 if (-not $namenode) {
-    Write-Host "  Setting up Hadoop HDFS..." -ForegroundColor Yellow
-    & (Join-Path $ScriptsDir "setup-hadoop.ps1")
+    Write-Host "  NameNode not found. Will set up HDFS..." -ForegroundColor Yellow
+    $needSetup = $true
 } else {
-    Write-Host "  [OK] Hadoop NameNode running" -ForegroundColor Green
+    # NameNode exists — check if DataNodes are registered.
+    $report = docker exec hadoop-namenode /opt/hadoop/bin/hdfs dfsadmin -report 2>&1 | Out-String
+    if ($report -match "Live datanodes \((\d+)\)") {
+        $liveCount = [int]$Matches[1]
+        if ($liveCount -eq 0) {
+            Write-Host "  WARNING: NameNode running but 0 DataNodes registered!" -ForegroundColor Yellow
+            Write-Host "  Tearing down and re-setting up HDFS..." -ForegroundColor Yellow
+            $needSetup = $true
+        } else {
+            Write-Host "  [OK] Hadoop NameNode running with $liveCount DataNode(s)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  WARNING: Could not verify DataNode count. Re-setting up HDFS..." -ForegroundColor Yellow
+        $needSetup = $true
+    }
+}
+
+if ($needSetup) {
+    & (Join-Path $ScriptsDir "setup-hadoop.ps1")
 }
 
 # -- Step 3: Generate data

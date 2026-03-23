@@ -1,5 +1,14 @@
 $ErrorActionPreference = "Stop"
 
+function Assert-Admin {
+    $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    if (-not $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw "This script configures Windows Firewall and Port Proxies. You MUST run it in an Administrator PowerShell window."
+    }
+}
+
+Assert-Admin
+
 <#
 .SYNOPSIS
     Sets up a Hadoop HDFS cluster across multiple machines.
@@ -99,6 +108,13 @@ Write-Host "Starting NameNode on this PC ($mainPcIp)..." -ForegroundColor Yellow
 
 # Set up port proxy so remote DataNodes can reach the NameNode
 Write-Host "Configuring Windows port proxy for NameNode (requires Admin)..." -ForegroundColor Yellow
+
+# Firewall rules
+$ruleName = "WSH Hadoop NameNode"
+cmd /c "netsh advfirewall firewall delete rule name=""$ruleName""" 2>$null | Out-Null
+cmd /c "netsh advfirewall firewall add rule name=""$ruleName"" dir=in action=allow protocol=TCP localport=8020,9870" | Out-Null
+
+# Port proxies
 cmd /c "netsh interface portproxy delete v4tov4 listenaddress=$mainPcIp listenport=8020" 2>$null | Out-Null
 cmd /c "netsh interface portproxy delete v4tov4 listenaddress=$mainPcIp listenport=9870" 2>$null | Out-Null
 cmd /c "netsh interface portproxy add v4tov4 listenaddress=$mainPcIp listenport=8020 connectaddress=127.0.0.1 connectport=8020"
@@ -119,7 +135,7 @@ cat > /opt/hadoop/etc/hadoop/hdfs-site.xml << 'HDFSEOF'
 <configuration>
   <property>
     <name>dfs.replication</name>
-    <value>2</value>
+    <value>1</value>
   </property>
   <property>
     <name>dfs.namenode.name.dir</name>
@@ -133,11 +149,25 @@ cat > /opt/hadoop/etc/hadoop/hdfs-site.xml << 'HDFSEOF'
     <name>dfs.client.use.datanode.hostname</name>
     <value>true</value>
   </property>
+  <property>
+    <name>dfs.namenode.rpc-bind-host</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-bind-host</name>
+    <value>0.0.0.0</value>
+  </property>
 </configuration>
 HDFSEOF
 /opt/hadoop/bin/hdfs namenode -format -force 2>/dev/null;
 /opt/hadoop/bin/hdfs namenode
 "@
+
+# Build bigdata directory path for volume mount.
+$BigDataDir = Join-Path $Root "bigdata"
+if (-not (Test-Path $BigDataDir)) {
+    New-Item -ItemType Directory -Path $BigDataDir -Force | Out-Null
+}
 
 docker run -d `
     --name hadoop-namenode `
@@ -145,6 +175,7 @@ docker run -d `
     --network $NetworkName `
     -p 9870:9870 `
     -p 8020:8020 `
+    -v "${BigDataDir}:/bigdata:ro" `
     -e HADOOP_HOME=/opt/hadoop `
     -e CLUSTER_NAME=wsh-hdfs `
     $HadoopImage `
@@ -163,6 +194,49 @@ if (-not $nnStatus) {
     exit 1
 }
 Write-Host "[OK] NameNode started (Web UI: http://localhost:9870)" -ForegroundColor Green
+
+# ── Start LOCAL DataNode (same Docker network, always reachable) ───────
+Write-Host ""
+Write-Host "Starting local DataNode on this PC..." -ForegroundColor Yellow
+
+$localDatanodeScript = @"
+mkdir -p /opt/hadoop/etc/hadoop;
+cat > /opt/hadoop/etc/hadoop/core-site.xml << 'COREEOF'
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://hadoop-namenode:8020</value>
+  </property>
+</configuration>
+COREEOF
+cat > /opt/hadoop/etc/hadoop/hdfs-site.xml << 'HDFSEOF'
+<configuration>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>/tmp/hadoop-datanode</value>
+  </property>
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>false</value>
+  </property>
+</configuration>
+HDFSEOF
+/opt/hadoop/bin/hdfs datanode
+"@
+
+# Remove old local datanode if exists.
+$c = docker ps -a --filter "name=^hadoop-datanode-local$" --format "{{.Names}}" 2>$null
+if ($c) { docker rm -f hadoop-datanode-local 2>$null | Out-Null }
+
+docker run -d `
+    --name hadoop-datanode-local `
+    --hostname hadoop-datanode-local `
+    --network $NetworkName `
+    -e HADOOP_HOME=/opt/hadoop `
+    $HadoopImage `
+    bash -c $localDatanodeScript
+
+Write-Host "[OK] Local DataNode started (same Docker network as NameNode)" -ForegroundColor Green
 
 # ── Start DataNodes on remote PCs ──────────────────────────────────────
 
@@ -235,6 +309,6 @@ Write-Host "========================================================" -Foregroun
 Write-Host "  Hadoop HDFS Ready!                                    " -ForegroundColor Green
 Write-Host "  NameNode: $mainPcIp:8020                              " -ForegroundColor Green
 Write-Host "  Web UI:   http://localhost:9870                       " -ForegroundColor Green
-Write-Host "  DataNodes: $($ips.Count) (on remote PCs)               " -ForegroundColor Green
+Write-Host "  DataNodes: 1 local + $($ips.Count) remote              " -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host ""

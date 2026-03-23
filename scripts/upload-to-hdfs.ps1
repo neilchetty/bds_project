@@ -4,8 +4,10 @@ $ErrorActionPreference = "Stop"
 .SYNOPSIS
     Uploads generated big data files to Hadoop HDFS.
 .DESCRIPTION
-    Copies the synthetic bioinformatics data from the local 'bigdata/' directory
-    into HDFS at /wsh/gene2life/. Also verifies the upload.
+    The NameNode container has /bigdata volume-mounted from the host.
+    This script simply runs 'hdfs dfs -put' via docker exec to upload
+    files from /bigdata into HDFS. No docker cp, no separate containers,
+    no cross-network issues.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File upload-to-hdfs.ps1
@@ -34,35 +36,48 @@ if ($dataFiles.Count -eq 0) {
 }
 
 # Check NameNode is running.
-try {
-    docker exec hadoop-namenode /opt/hadoop/bin/hdfs dfs -ls / | Out-Null
-} catch {
+$nnCheck = docker ps --filter "name=hadoop-namenode" --format "{{.Names}}" 2>&1
+if (-not $nnCheck) {
     Write-Host "ERROR: Hadoop NameNode is not running. Run setup-hadoop.ps1 first." -ForegroundColor Red
+    exit 1
+}
+
+# Verify /bigdata mount exists inside the NameNode.
+$mountCheck = docker exec hadoop-namenode ls /bigdata 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: /bigdata not mounted in NameNode container." -ForegroundColor Red
+    Write-Host "  Re-run setup-hadoop.ps1 to recreate the NameNode with the volume mount." -ForegroundColor Yellow
     exit 1
 }
 
 # Create HDFS directory.
 Write-Host "Creating HDFS directory: $HdfsDir" -ForegroundColor Yellow
-docker exec hadoop-namenode /opt/hadoop/bin/hdfs dfs -mkdir -p $HdfsDir
+docker exec hadoop-namenode /opt/hadoop/bin/hdfs dfs -mkdir -p $HdfsDir 2>&1 | Out-Null
 
-# Upload each file.
+# Upload each file directly from the /bigdata mount inside the NameNode.
+# Since the local DataNode is on the same Docker network, writes always succeed.
 foreach ($file in $dataFiles) {
     $hdfsPath = "$HdfsDir/$($file.Name)"
-    $localInContainer = "/tmp/$($file.Name)"
+    $containerPath = "/bigdata/$($file.Name)"
     $sizeMB = [math]::Round($file.Length / (1024 * 1024), 1)
 
     Write-Host "  Uploading: $($file.Name) ($sizeMB MB) ..." -ForegroundColor Yellow
 
-    # Copy file into NameNode container first.
-    docker cp $file.FullName "hadoop-namenode:$localInContainer"
+    # Temporarily relax error preference so HDFS WARN logs don't crash PowerShell.
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
 
-    # Then put into HDFS.
-    docker exec hadoop-namenode /opt/hadoop/bin/hdfs dfs -put -f $localInContainer $hdfsPath
+    $output = docker exec hadoop-namenode /opt/hadoop/bin/hdfs dfs -put -f $containerPath $hdfsPath 2>&1
+    $exitCode = $LASTEXITCODE
 
-    # Cleanup local copy in container.
-    docker exec hadoop-namenode rm -f $localInContainer
+    $ErrorActionPreference = $savedEAP
 
-    Write-Host "  [OK] $($file.Name) -> $hdfsPath" -ForegroundColor Green
+    if ($exitCode -ne 0) {
+        Write-Host "  [FAIL] Upload failed for $($file.Name) (exit code $exitCode)" -ForegroundColor Red
+        $output | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+    } else {
+        Write-Host "  [OK] $($file.Name) -> $hdfsPath" -ForegroundColor Green
+    }
 }
 
 # Verify upload.

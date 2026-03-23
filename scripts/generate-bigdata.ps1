@@ -53,6 +53,9 @@ $files = @(
     @{ Name = "dnapars_matrix.dat"; Fraction = 0.025 },
     @{ Name = "protpars_matrix.dat"; Fraction = 0.025 }
 )
+$dockerImage = "debian:bullseye-slim"
+Write-Host "  Pulling $dockerImage (if not cached)..." -ForegroundColor DarkGray
+docker pull $dockerImage 2>$null | Out-Null
 
 foreach ($file in $files) {
     $filePath = Join-Path $DataDir $file.Name
@@ -69,36 +72,21 @@ foreach ($file in $files) {
 
     Write-Host "  [GEN]  $($file.Name) ($fileSizeMB MB) ..." -ForegroundColor Yellow
 
-    # Generate synthetic FASTA data using PowerShell.
-    # Each line is a FASTA record: >seq_XXXX followed by a 80-char sequence line.
-    $chunkSizeMB = 256
-    $remainingMB = $fileSizeMB
-    $first = $true
+    # Generate synthetic data efficiently using a temporary container with a volume mount.
+    # This writes DIRECTLY to the Windows host without inflating Docker's virtual ext4.vhdx disk.
+    $linuxPath = "/data/$($file.Name)"
+    
+    # Check if we need to write a FASTA header
+    $headerScript = "echo '>synthetic_genome_sequence_database' > $linuxPath;"
+    
+    # We use base64 on urandom so that we get printable text characters simulating a genomic sequence.
+    # base64 output size is 4/3 of input size. To get target MB, we need input MB = target MB * 0.75
+    $inputMB = [math]::Ceiling($fileSizeMB * 0.75)
 
-    while ($remainingMB -gt 0) {
-        $currentChunk = [math]::Min($chunkSizeMB, $remainingMB)
-        $remainingMB -= $currentChunk
+    Write-Host "    Writing directly to host disk using volume mount (no container space leak)..." -ForegroundColor DarkGray
 
-        # Use docker to generate random data efficiently (faster than PowerShell).
-        $container = "worker-c1-1"
-        $tmpFile = "/tmp/wsh-bigdata-gen.bin"
-
-        if ($first) {
-            # Write FASTA header first.
-            docker exec $container bash -c "echo '>synthetic_genome_sequence_database' > $tmpFile; dd if=/dev/urandom bs=1M count=$currentChunk status=none | base64 >> $tmpFile" 2>$null
-            docker cp "${container}:${tmpFile}" $filePath 2>&1 | Out-Null
-            $first = $false
-        } else {
-            docker exec $container bash -c "dd if=/dev/urandom bs=1M count=$currentChunk status=none | base64 > $tmpFile" 2>$null
-            # Append to existing file via docker cp to temp then append.
-            $tempLocal = Join-Path $DataDir "temp_chunk.bin"
-            docker cp "${container}:${tmpFile}" $tempLocal 2>&1 | Out-Null
-            Get-Content $tempLocal -Raw | Add-Content $filePath
-            Remove-Item $tempLocal -ErrorAction SilentlyContinue
-        }
-
-        docker exec $container rm -f $tmpFile 2>&1 | Out-Null
-    }
+    # Use docker run with --rm to ensure no leftovers. Mount BigData dir to /data.
+    docker run --rm -v "${DataDir}:/data" $dockerImage bash -c "$headerScript dd if=/dev/urandom bs=1M count=$inputMB status=none | base64 >> $linuxPath" 2>$null
 
     $finalSize = (Get-Item $filePath).Length
     Write-Host "  [OK]   $($file.Name) = $([math]::Round($finalSize / 1GB, 2)) GB" -ForegroundColor Green
