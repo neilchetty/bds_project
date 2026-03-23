@@ -1,66 +1,66 @@
-# Docker Compose for MAIN PC (PC1) — C1 tier (high-end): 7 nodes
-# Run: docker compose up -d
+# Docker Compose for PC2 — C2 tier (mid-range): 7 nodes
+# Copy this file to PC2 and run: docker compose -f docker-compose-c2.yml up -d
 
 services:
-  worker-c1-1:
+  worker-c2-1:
     image: ubuntu:22.04
-    container_name: worker-c1-1
-    hostname: worker-c1-1
+    container_name: worker-c2-1
+    hostname: worker-c2-1
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m
 
-  worker-c1-2:
+  worker-c2-2:
     image: ubuntu:22.04
-    container_name: worker-c1-2
-    hostname: worker-c1-2
+    container_name: worker-c2-2
+    hostname: worker-c2-2
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m
 
-  worker-c1-3:
+  worker-c2-3:
     image: ubuntu:22.04
-    container_name: worker-c1-3
-    hostname: worker-c1-3
+    container_name: worker-c2-3
+    hostname: worker-c2-3
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m
 
-  worker-c1-4:
+  worker-c2-4:
     image: ubuntu:22.04
-    container_name: worker-c1-4
-    hostname: worker-c1-4
+    container_name: worker-c2-4
+    hostname: worker-c2-4
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m
 
-  worker-c1-5:
+  worker-c2-5:
     image: ubuntu:22.04
-    container_name: worker-c1-5
-    hostname: worker-c1-5
+    container_name: worker-c2-5
+    hostname: worker-c2-5
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m
 
-  worker-c1-6:
+  worker-c2-6:
     image: ubuntu:22.04
-    container_name: worker-c1-6
-    hostname: worker-c1-6
+    container_name: worker-c2-6
+    hostname: worker-c2-6
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m
 
-  worker-c1-7:
+  worker-c2-7:
     image: ubuntu:22.04
-    container_name: worker-c1-7
-    hostname: worker-c1-7
+    container_name: worker-c2-7
+    hostname: worker-c2-7
     command: ["bash", "-c", "apt-get update -qq && apt-get install -y -qq coreutils > /dev/null 2>&1; sleep infinity"]
     restart: unless-stopped
-    cpus: "4.0"
-    mem_limit: 4096m
+    cpus: "2.0"
+    mem_limit: 2048m

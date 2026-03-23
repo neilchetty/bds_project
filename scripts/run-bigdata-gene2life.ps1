@@ -1,9 +1,5 @@
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("single", "multi")]
-    [string]$Phase = "single",
-
-    [Parameter(Mandatory=$false)]
     [ValidateRange(1, 100)]
     [int]$SizeGB = 30
 )
@@ -21,14 +17,12 @@ $ErrorActionPreference = "Stop"
       4. Run Gene2life workflow with WSH and HEFT on real containers
       5. Display comparison results
 
-.PARAMETER Phase
-    'single' (all on one machine) or 'multi' (4-PC cluster).
 .PARAMETER SizeGB
     Size of synthetic data in GB (default: 30).
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File run-bigdata-gene2life.ps1
-    powershell -ExecutionPolicy Bypass -File run-bigdata-gene2life.ps1 -Phase multi -SizeGB 60
+    powershell -ExecutionPolicy Bypass -File run-bigdata-gene2life.ps1 -SizeGB 60
 #>
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -36,7 +30,7 @@ $ScriptsDir = $PSScriptRoot
 
 Write-Host ""
 Write-Host "╔══════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  Gene2life Big Data Pipeline ($Phase, ${SizeGB}GB)     ║" -ForegroundColor Cyan
+Write-Host "║  Gene2life Big Data Pipeline (multi-machine, ${SizeGB}GB) ║" -ForegroundColor Cyan
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
@@ -46,12 +40,8 @@ $workers = docker ps --format "{{.Names}}" | Where-Object { $_ -match "^worker-c
 $workerCount = ($workers | Measure-Object).Count
 if ($workerCount -lt 4) {
     Write-Host "  WARNING: Only $workerCount worker containers running." -ForegroundColor Yellow
-    Write-Host "  Starting containers..." -ForegroundColor Yellow
-    if ($Phase -eq "single") {
-        & (Join-Path $ScriptsDir "start-single-machine.ps1")
-    } else {
-        & (Join-Path $ScriptsDir "start-multi-machine.ps1")
-    }
+    Write-Host "  Starting C1 containers on this PC..." -ForegroundColor Yellow
+    & (Join-Path $ScriptsDir "start-multi-machine.ps1")
 } else {
     Write-Host "  [OK] $workerCount worker containers running" -ForegroundColor Green
 }
@@ -62,7 +52,7 @@ Write-Host "[Step 2/5] Checking Hadoop HDFS..." -ForegroundColor Yellow
 $namenode = docker ps --format "{{.Names}}" | Where-Object { $_ -eq "hadoop-namenode" }
 if (-not $namenode) {
     Write-Host "  Setting up Hadoop HDFS..." -ForegroundColor Yellow
-    & (Join-Path $ScriptsDir "setup-hadoop.ps1") -Phase $Phase
+    & (Join-Path $ScriptsDir "setup-hadoop.ps1")
 } else {
     Write-Host "  [OK] Hadoop NameNode running" -ForegroundColor Green
 }
@@ -79,7 +69,7 @@ $targetBytes = [long]$SizeGB * 1024 * 1024 * 1024
 if ($existingSize -ge ($targetBytes * 0.90)) {
     Write-Host "  [SKIP] Data already generated ($([math]::Round($existingSize / 1GB, 1)) GB)" -ForegroundColor Green
 } else {
-    & (Join-Path $ScriptsDir "generate-bigdata.ps1") -SizeGB $SizeGB -Phase $Phase
+    & (Join-Path $ScriptsDir "generate-bigdata.ps1") -SizeGB $SizeGB
 }
 
 # ── Step 4: Upload to HDFS ─────────────────────────────────────────────
@@ -94,12 +84,8 @@ Write-Host "[Step 5/5] Running Gene2life benchmark..." -ForegroundColor Yellow
 # Build Java project.
 & (Join-Path $ScriptsDir "build.ps1")
 
-# Determine nodes file.
-if ($Phase -eq "single") {
-    $nodesFile = Join-Path $Root "config\cluster\local-docker-nodes.csv"
-} else {
-    $nodesFile = Join-Path $Root "config\cluster\multi-machine-nodes.csv"
-}
+# Always use multi-machine nodes.
+$nodesFile = Join-Path $Root "config\cluster\multi-machine-nodes.csv"
 
 # Run Gene2life with WSH.
 Write-Host ""

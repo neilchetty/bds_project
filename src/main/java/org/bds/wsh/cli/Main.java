@@ -102,7 +102,7 @@ public final class Main {
         Path nodesFile = optionPath(args, "--nodes-file");
 
         if (nodesFile == null) {
-            nodesFile = Path.of("config/cluster/local-docker-nodes.csv");
+            nodesFile = Path.of("config/cluster/multi-machine-nodes.csv");
         }
 
         Workflow workflow = workflowFile == null ? workflowByName(workflowName) : new DaxWorkflowLoader().load(workflowFile);
@@ -290,7 +290,7 @@ public final class Main {
         lines.add("    java -jar build/wsh-scheduler.jar verify --input results/metrics.csv");
         lines.add("");
         lines.add("  Real execution commands (NEW):");
-        lines.add("    java -jar build/wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config/cluster/local-docker-nodes.csv --output results/real-execution.csv");
+        lines.add("    java -jar build/wsh-scheduler.jar execute --workflow Gene2life --algorithm WSH --nodes-file config/cluster/multi-machine-nodes.csv --output results/real-execution.csv");
         lines.add("    java -jar build/wsh-scheduler.jar real-benchmark --node-counts 4,7,10,13,16,20,24,28 --output results/real-metrics.csv --details-dir results/real-executions");
         lines.forEach(System.out::println);
     }

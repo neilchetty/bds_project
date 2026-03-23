@@ -11,9 +11,7 @@ $ErrorActionPreference = "Stop"
       - PC4 (remote):            Runs C4 tier (7 containers)
     
     This script starts only the C1 tier on the main PC.
-    Remote PCs must run their own containers via setup-remote-machine.ps1.
-    
-    After all machines are up, edit the node CSV files to set the remote IPs.
+    Remote PCs must run their own containers using the per-tier compose files.
 #>
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -37,7 +35,7 @@ try {
 Write-Host "Pulling ubuntu:22.04 image..." -ForegroundColor Yellow
 docker pull ubuntu:22.04
 
-# Start only C1 tier (no profile = only services without profiles).
+# Start C1 tier containers.
 Write-Host ""
 Write-Host "Starting C1 tier containers (worker-c1-1 through worker-c1-7)..." -ForegroundColor Yellow
 Push-Location $Root
@@ -46,8 +44,8 @@ Pop-Location
 
 # Wait for initialization.
 Write-Host ""
-Write-Host "Waiting 10 seconds for containers to initialize..." -ForegroundColor Yellow
-Start-Sleep -Seconds 10
+Write-Host "Waiting 15 seconds for containers to initialize..." -ForegroundColor Yellow
+Start-Sleep -Seconds 15
 
 # Verify local containers.
 Write-Host ""
@@ -70,19 +68,21 @@ Write-Host "====================================================================
 Write-Host "  NEXT STEPS FOR MULTI-MACHINE SETUP:                                   " -ForegroundColor Yellow
 Write-Host "========================================================================" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  1. Copy these files to EACH remote PC (PC2, PC3, PC4):" -ForegroundColor White
-Write-Host "       - scripts\setup-remote-machine.ps1" -ForegroundColor White
-Write-Host "       - docker-compose-worker.yml" -ForegroundColor White
+Write-Host "  1. On EACH remote PC, enable Docker TCP API:" -ForegroundColor White
+Write-Host "       - Open Docker Desktop > Settings > General" -ForegroundColor Gray
+Write-Host "       - Check 'Expose daemon on tcp://localhost:2375 without TLS'" -ForegroundColor Gray
+Write-Host "       - Then run (as Administrator):" -ForegroundColor Gray
+Write-Host "         powershell -ExecutionPolicy Bypass -File docker-inbound.ps1" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  2. On each remote PC, run (as Administrator):" -ForegroundColor White
-Write-Host "       powershell -ExecutionPolicy Bypass -File setup-remote-machine.ps1 -Tier C2" -ForegroundColor Cyan
-Write-Host "       (Use -Tier C3 for PC3, -Tier C4 for PC4)" -ForegroundColor Gray
+Write-Host "  2. Copy the per-tier compose file to each remote PC:" -ForegroundColor White
+Write-Host "       PC2: docker-compose-c2.yml  (run: docker compose -f docker-compose-c2.yml up -d)" -ForegroundColor Cyan
+Write-Host "       PC3: docker-compose-c3.yml  (run: docker compose -f docker-compose-c3.yml up -d)" -ForegroundColor Cyan
+Write-Host "       PC4: docker-compose-c4.yml  (run: docker compose -f docker-compose-c4.yml up -d)" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  3. Note each remote PC's IP address (run 'ipconfig' on each)" -ForegroundColor White
+Write-Host "  3. Edit config\ip.txt with the 3 remote PC IPs (one per line)" -ForegroundColor White
 Write-Host ""
-Write-Host "  4. Back on THIS PC, update the node CSV files with the IPs:" -ForegroundColor White
-Write-Host "       Edit: config\cluster\multi-machine-nodes.csv" -ForegroundColor White
-Write-Host "       Replace REPLACE_PC2_IP, REPLACE_PC3_IP, REPLACE_PC4_IP" -ForegroundColor White
+Write-Host "  4. Run configure-cluster.ps1 to update the node CSV:" -ForegroundColor White
+Write-Host "       powershell -ExecutionPolicy Bypass -File scripts\configure-cluster.ps1" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  5. Verify connectivity from this PC:" -ForegroundColor White
 Write-Host "       docker -H tcp://<PC2_IP>:2375 ps" -ForegroundColor Cyan

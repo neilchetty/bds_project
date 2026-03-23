@@ -65,5 +65,5 @@ cmd /c "netsh advfirewall firewall show rule name=""$RuleName"""
 
 Write-Host ""
 Write-Host "Test from another machine with:"
-Write-Host "  curl http://$ListenIP:$Port/version"
-Write-Host "  docker -H tcp://$ListenIP:$Port version"
+# Write-Host "  curl http://$ListenIP:$Port/version"
+# Write-Host "  docker -H tcp://$ListenIP:$Port version"

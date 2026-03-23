@@ -1,9 +1,3 @@
-param(
-    [Parameter(Mandatory=$false)]
-    [ValidateSet("single", "multi")]
-    [string]$Phase = "single"
-)
-
 $ErrorActionPreference = "Stop"
 
 <#
@@ -73,46 +67,29 @@ docker run -d `
 
 Write-Host "[OK] NameNode started (Web UI: http://localhost:9870)" -ForegroundColor Green
 
-# Start DataNodes.
-if ($Phase -eq "single") {
-    $dataNodeCount = 2
-    for ($i = 1; $i -le $dataNodeCount; $i++) {
-        $name = "hadoop-datanode$i"
-        Write-Host "Starting $name..." -ForegroundColor Yellow
-        docker run -d `
-            --name $name `
-            --hostname $name `
-            --network $NetworkName `
-            -e HADOOP_HOME=/opt/hadoop `
-            $HadoopImage `
-            bash -c "/opt/hadoop/bin/hdfs datanode"
-        Write-Host "[OK] $name started" -ForegroundColor Green
-    }
-} else {
-    # Multi-machine: read IPs from ip.txt.
-    $ipFile = Join-Path $Root "config\ip.txt"
-    if (-not (Test-Path $ipFile)) {
-        Write-Host "ERROR: $ipFile not found. Create it with remote PC IPs." -ForegroundColor Red
-        exit 1
-    }
-    $ips = Get-Content $ipFile | Where-Object { $_ -and $_ -notmatch "^\s*#" } | ForEach-Object { $_.Trim() }
-    if ($ips.Count -eq 0) {
-        Write-Host "ERROR: No IPs found in $ipFile" -ForegroundColor Red
-        exit 1
-    }
-    $i = 1
-    foreach ($ip in $ips) {
-        $name = "hadoop-datanode$i"
-        Write-Host "Starting $name on $ip..." -ForegroundColor Yellow
-        docker -H "tcp://${ip}:2375" run -d `
-            --name $name `
-            --hostname $name `
-            -e HADOOP_HOME=/opt/hadoop `
-            $HadoopImage `
-            bash -c "/opt/hadoop/bin/hdfs datanode"
-        Write-Host "[OK] $name started on $ip" -ForegroundColor Green
-        $i++
-    }
+# Start DataNodes on remote PCs (read IPs from ip.txt).
+$ipFile = Join-Path $Root "config\ip.txt"
+if (-not (Test-Path $ipFile)) {
+    Write-Host "ERROR: $ipFile not found. Create it with remote PC IPs." -ForegroundColor Red
+    exit 1
+}
+$ips = Get-Content $ipFile | Where-Object { $_ -and $_ -notmatch "^\s*#" } | ForEach-Object { $_.Trim() }
+if ($ips.Count -eq 0) {
+    Write-Host "ERROR: No IPs found in $ipFile" -ForegroundColor Red
+    exit 1
+}
+$i = 1
+foreach ($ip in $ips) {
+    $name = "hadoop-datanode$i"
+    Write-Host "Starting $name on $ip..." -ForegroundColor Yellow
+    docker -H "tcp://${ip}:2375" run -d `
+        --name $name `
+        --hostname $name `
+        -e HADOOP_HOME=/opt/hadoop `
+        $HadoopImage `
+        bash -c "/opt/hadoop/bin/hdfs datanode"
+    Write-Host "[OK] $name started on $ip" -ForegroundColor Green
+    $i++
 }
 
 # Wait for HDFS to stabilize.

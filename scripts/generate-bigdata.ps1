@@ -1,9 +1,5 @@
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("single", "multi")]
-    [string]$Phase = "single",
-
-    [Parameter(Mandatory=$false)]
     [ValidateRange(1, 100)]
     [int]$SizeGB = 30
 )
