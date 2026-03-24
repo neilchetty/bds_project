@@ -15,8 +15,10 @@ DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
 GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication}"
 BASE_WORK_DIR="${BASE_WORK_DIR:-$ROOT_DIR/work/paper-sweeps}"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/work/paper-sweep-logs}"
+DATASET_BASE_DIR="${DATASET_BASE_DIR:-$BASE_WORK_DIR/datasets}"
+REUSE_DATA="${REUSE_DATA:-true}"
 
-mkdir -p "$BASE_WORK_DIR" "$LOG_DIR"
+mkdir -p "$BASE_WORK_DIR" "$LOG_DIR" "$DATASET_BASE_DIR"
 
 MASTER_LOG="$LOG_DIR/master-$(date '+%Y%m%d-%H%M%S').log"
 
@@ -47,6 +49,7 @@ log "NODE_COUNTS=$NODE_COUNTS"
 log "CLUSTER_CONFIG=$CLUSTER_CONFIG"
 log "EXECUTOR=$EXECUTOR"
 log "COMPARE_ROUNDS=$COMPARE_ROUNDS"
+log "REUSE_DATA=$REUSE_DATA"
 
 log "Building classes once before the sweep"
 run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build.sh"
@@ -57,6 +60,7 @@ if [[ "$EXECUTOR" == "docker" ]]; then
 fi
 
 for workflow in $WORKFLOWS; do
+  data_root="$DATASET_BASE_DIR/$workflow"
   for nodes in $NODE_COUNTS; do
     run_name="${workflow}-nodes-${nodes}"
     workspace="$BASE_WORK_DIR/$run_name"
@@ -68,12 +72,14 @@ for workflow in $WORKFLOWS; do
     if ! run_with_timestamped_log "$logfile" env \
       WORKSPACE="$workspace" \
       WORKFLOW="$workflow" \
+      DATA_ROOT="$data_root" \
       PROFILE="$PROFILE" \
       CLUSTER_CONFIG="$CLUSTER_CONFIG" \
       MAX_NODES="$nodes" \
       COMPARE_ROUNDS="$COMPARE_ROUNDS" \
       TRAINING_WARMUP_RUNS="$TRAINING_WARMUP_RUNS" \
       TRAINING_MEASURE_RUNS="$TRAINING_MEASURE_RUNS" \
+      REUSE_DATA="$REUSE_DATA" \
       EXECUTOR="$EXECUTOR" \
       DOCKER_IMAGE="$DOCKER_IMAGE" \
       GENE2LIFE_JAVA_OPTS="$GENE2LIFE_JAVA_OPTS" \
