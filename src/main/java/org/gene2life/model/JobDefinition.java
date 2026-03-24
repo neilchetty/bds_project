@@ -1,11 +1,20 @@
 package org.gene2life.model;
 
+import java.util.Map;
 import java.util.List;
 
 public record JobDefinition(
-        JobId id,
+        String id,
         String displayName,
-        List<JobId> dependencies,
+        List<String> dependencies,
+        TaskType taskType,
+        long modeledCostMillis,
+        String trainingProfileKey,
         String paperInputHint,
-        String paperOutputHint) {
+        String paperOutputHint,
+        Map<String, String> parameters) {
+    public JobDefinition {
+        parameters = parameters == null ? Map.of() : Map.copyOf(parameters);
+        dependencies = List.copyOf(dependencies);
+    }
 }

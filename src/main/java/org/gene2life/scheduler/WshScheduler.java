@@ -2,14 +2,12 @@ package org.gene2life.scheduler;
 
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobDefinition;
-import org.gene2life.model.JobId;
 import org.gene2life.model.NodeProfile;
 import org.gene2life.model.PlanAssignment;
 import org.gene2life.model.WorkflowDefinition;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,22 +15,22 @@ import java.util.Map;
 public final class WshScheduler implements Scheduler {
     @Override
     public List<PlanAssignment> buildPlan(WorkflowDefinition workflow, List<ClusterProfile> clusters, TrainingBenchmarks benchmarks) {
-        Map<JobId, Double> ranks = computeUpwardRanks(workflow, benchmarks);
+        Map<String, Double> ranks = computeUpwardRanks(workflow, benchmarks);
         List<JobDefinition> ordered = workflow.jobs().stream()
                 .sorted(Comparator.<JobDefinition>comparingDouble(def -> ranks.get(def.id())).reversed()
-                        .thenComparing(def -> def.id().ordinal()))
+                        .thenComparingInt(def -> workflow.orderOf(def.id())))
                 .toList();
         Map<String, Long> nodeAvailable = new HashMap<>();
-        Map<JobId, Long> jobFinish = new EnumMap<>(JobId.class);
+        Map<String, Long> jobFinish = new HashMap<>();
         Map<String, Integer> activatedNodesPerCluster = new HashMap<>();
         List<PlanAssignment> plan = new ArrayList<>();
         for (JobDefinition job : ordered) {
-            List<String> sortedClusters = benchmarks.sortedClusters(job.id(), clusters);
+            List<String> sortedClusters = benchmarks.sortedClusters(job, clusters);
             List<NodeProfile> candidates = candidateNodes(sortedClusters, clusters, activatedNodesPerCluster);
             Candidate best = null;
             for (NodeProfile node : candidates) {
                 long est = Math.max(nodeAvailable.getOrDefault(node.nodeId(), 0L), maxDependencyFinish(job, jobFinish));
-                long eft = est + benchmarks.duration(job.id(), node.clusterId());
+                long eft = est + benchmarks.duration(job, node.clusterId());
                 Candidate candidate = new Candidate(node, est, eft);
                 if (best == null || candidate.eft < best.eft) {
                     best = candidate;
@@ -59,7 +57,7 @@ public final class WshScheduler implements Scheduler {
                     best.eft,
                     ranks.get(job.id()),
                     name(),
-                    benchmarks.classification(job.id())));
+                    benchmarks.classification(job)));
         }
         return plan;
     }
@@ -91,7 +89,7 @@ public final class WshScheduler implements Scheduler {
         return candidates;
     }
 
-    private long maxDependencyFinish(JobDefinition job, Map<JobId, Long> jobFinish) {
+    private long maxDependencyFinish(JobDefinition job, Map<String, Long> jobFinish) {
         return job.dependencies().stream().mapToLong(dep -> jobFinish.getOrDefault(dep, 0L)).max().orElse(0L);
     }
 
@@ -107,8 +105,8 @@ public final class WshScheduler implements Scheduler {
         return cluster.nodes().get(cluster.nodes().size() - 1).nodeId().equals(node.nodeId());
     }
 
-    private Map<JobId, Double> computeUpwardRanks(WorkflowDefinition workflow, TrainingBenchmarks benchmarks) {
-        Map<JobId, Double> ranks = new EnumMap<>(JobId.class);
+    private Map<String, Double> computeUpwardRanks(WorkflowDefinition workflow, TrainingBenchmarks benchmarks) {
+        Map<String, Double> ranks = new HashMap<>();
         for (JobDefinition job : workflow.jobs()) {
             computeRank(job.id(), workflow, benchmarks, ranks);
         }
@@ -116,14 +114,14 @@ public final class WshScheduler implements Scheduler {
     }
 
     private double computeRank(
-            JobId jobId,
+            String jobId,
             WorkflowDefinition workflow,
             TrainingBenchmarks benchmarks,
-            Map<JobId, Double> ranks) {
+            Map<String, Double> ranks) {
         if (ranks.containsKey(jobId)) {
             return ranks.get(jobId);
         }
-        double own = benchmarks.averageDuration(jobId);
+        double own = benchmarks.averageDuration(workflow.job(jobId));
         double successor = workflow.successors(jobId).stream()
                 .mapToDouble(job -> computeRank(job.id(), workflow, benchmarks, ranks))
                 .max()

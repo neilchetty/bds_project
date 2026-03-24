@@ -2,11 +2,11 @@ package org.gene2life.scheduler;
 
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobDefinition;
-import org.gene2life.model.JobId;
 import org.gene2life.model.NodeProfile;
+import org.gene2life.model.TaskType;
 import org.gene2life.model.WorkflowDefinition;
 
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,30 +14,25 @@ public final class DurationModel {
     private DurationModel() {
     }
 
-    public static long estimateDuration(JobId jobId, NodeProfile node) {
-        double base = switch (jobId) {
-            case BLAST1, BLAST2 -> 62_000.0;
-            case CLUSTALW1, CLUSTALW2 -> 90_000.0;
-            case DNAPARS -> 19_000.0;
-            case PROTPARS -> 16_000.0;
-            case DRAWGRAM1, DRAWGRAM2 -> 18_000.0;
-        };
+    public static long estimateDuration(JobDefinition job, NodeProfile node) {
+        double base = job.modeledCostMillis();
         double cpuFactor = Math.max(1.0, node.cpuThreads());
         double ioFactor = Math.max(1.0, node.ioBufferKb() / 256.0);
-        double estimate = switch (jobId) {
-            case BLAST1, BLAST2, CLUSTALW1, CLUSTALW2 -> base / cpuFactor;
-            case DNAPARS, PROTPARS -> base / ((cpuFactor * 0.6) + (ioFactor * 0.4));
-            case DRAWGRAM1, DRAWGRAM2 -> base / ioFactor;
+        TaskType taskType = job.taskType();
+        double estimate = switch (taskType) {
+            case BLAST, CLUSTAL, DNAPARS, AUTOGRID, AUTODOCK, FASTQ_TO_BFQ, MAP, PILEUP -> base / cpuFactor;
+            case DRAWGRAM, PREPARE_GPF, PREPARE_DPF, FASTQ_SPLIT, FILTER_CONTAMS, SOL2SANGER, MAP_MERGE, MAQ_INDEX -> base / ioFactor;
+            case PROTPARS, PREPARE_RECEPTOR -> base / ((cpuFactor * 0.6) + (ioFactor * 0.4));
         };
         return Math.max(1L, Math.round(estimate));
     }
 
     public static long optimisticCriticalPath(WorkflowDefinition workflow, List<ClusterProfile> clusters) {
-        Map<JobId, Long> lowerBounds = new EnumMap<>(JobId.class);
+        Map<String, Long> lowerBounds = new HashMap<>();
         for (JobDefinition job : workflow.jobs()) {
             long minDuration = clusters.stream()
                     .flatMap(cluster -> cluster.nodes().stream())
-                    .mapToLong(node -> estimateDuration(job.id(), node))
+                    .mapToLong(node -> estimateDuration(job, node))
                     .min()
                     .orElse(0L);
             lowerBounds.put(job.id(), minDuration);
@@ -45,8 +40,8 @@ public final class DurationModel {
         return criticalPath(workflow, lowerBounds);
     }
 
-    private static long criticalPath(WorkflowDefinition workflow, Map<JobId, Long> durations) {
-        Map<JobId, Long> cache = new EnumMap<>(JobId.class);
+    private static long criticalPath(WorkflowDefinition workflow, Map<String, Long> durations) {
+        Map<String, Long> cache = new HashMap<>();
         long max = 0L;
         for (JobDefinition job : workflow.jobs()) {
             max = Math.max(max, criticalPath(job.id(), workflow, durations, cache));
@@ -55,10 +50,10 @@ public final class DurationModel {
     }
 
     private static long criticalPath(
-            JobId jobId,
+            String jobId,
             WorkflowDefinition workflow,
-            Map<JobId, Long> durations,
-            Map<JobId, Long> cache) {
+            Map<String, Long> durations,
+            Map<String, Long> cache) {
         if (cache.containsKey(jobId)) {
             return cache.get(jobId);
         }

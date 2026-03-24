@@ -1,7 +1,7 @@
 package org.gene2life.model;
 
 public record PlanAssignment(
-        JobId jobId,
+        String jobId,
         String clusterId,
         String nodeId,
         long predictedStartMillis,

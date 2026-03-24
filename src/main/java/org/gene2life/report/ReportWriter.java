@@ -1,7 +1,6 @@
 package org.gene2life.report;
 
 import org.gene2life.model.JobDefinition;
-import org.gene2life.model.JobId;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.PlanAssignment;
 import org.gene2life.model.ClusterProfile;
@@ -38,7 +37,7 @@ public final class ReportWriter {
             writer.newLine();
             for (PlanAssignment assignment : plan) {
                 writer.write(String.join(",",
-                        assignment.jobId().cliName(),
+                        assignment.jobId(),
                         assignment.clusterId(),
                         assignment.nodeId(),
                         Long.toString(assignment.predictedStartMillis()),
@@ -57,7 +56,7 @@ public final class ReportWriter {
             writer.newLine();
             for (JobRun run : runs) {
                 writer.write(String.join(",",
-                        run.jobId().cliName(),
+                        run.jobId(),
                         run.clusterId(),
                         run.nodeId(),
                         Long.toString(run.actualStartMillis()),
@@ -80,10 +79,10 @@ public final class ReportWriter {
             List<JobRun> runs,
             RunMetrics metrics) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8)) {
-            writer.write("# " + schedulerName + " Gene2Life Run");
+            writer.write("# " + schedulerName + " " + workflow.displayName() + " Run");
             writer.newLine();
             writer.newLine();
-            writer.write("This run uses the paper's 8-job `gene2life` DAG and executes real Java file-processing tasks over generated genomic-like data.");
+            writer.write("This run executes the paper-mapped `" + workflow.workflowId() + "` workflow over generated bioinformatics-style data.");
             writer.newLine();
             writer.newLine();
             writer.write("## Metrics");
@@ -103,18 +102,22 @@ public final class ReportWriter {
             writer.write("## Training Benchmarks");
             writer.newLine();
             writer.newLine();
-            if (benchmarks.hasMeasurements(JobId.BLAST1)) {
+            if (workflow.jobs().stream().anyMatch(benchmarks::hasMeasurements)) {
                 writer.write("- Warmup runs per cluster/job: " + benchmarks.warmupRuns());
                 writer.newLine();
                 writer.write("- Measured runs per cluster/job: " + benchmarks.measurementRuns());
                 writer.newLine();
                 writer.newLine();
             }
-            for (JobDefinition job : workflow.jobs()) {
-                writer.write("- " + job.id().cliName() + ": ");
-                writer.write(plan.stream().filter(item -> item.jobId() == job.id()).findFirst().map(PlanAssignment::classification).orElse("compute"));
-                writer.write(benchmarks.hasMeasurements(job.id()) ? " intensive; cluster order = " : " intensive; cluster order (static) = ");
-                writer.write(String.join(" > ", benchmarks.sortedClusters(job.id(), clusters)));
+            for (JobDefinition job : workflow.trainingRepresentativeJobs()) {
+                writer.write("- " + job.trainingProfileKey() + " (from " + job.id() + "): ");
+                writer.write(plan.stream()
+                        .filter(item -> item.jobId().equals(job.id()))
+                        .findFirst()
+                        .map(PlanAssignment::classification)
+                        .orElse(job.taskType().defaultClassification()));
+                writer.write(benchmarks.hasMeasurements(job) ? " intensive; cluster order = " : " intensive; cluster order (static) = ");
+                writer.write(String.join(" > ", benchmarks.sortedClusters(job, clusters)));
                 writer.newLine();
             }
             writer.newLine();
@@ -122,7 +125,7 @@ public final class ReportWriter {
             writer.newLine();
             writer.newLine();
             for (JobRun run : runs) {
-                writer.write("- " + run.jobId().cliName() + ": " + run.outputPath());
+                writer.write("- " + run.jobId() + ": " + run.outputPath());
                 writer.newLine();
             }
         }

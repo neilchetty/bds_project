@@ -2,52 +2,112 @@
 
 ## Source Paper
 
-`Main-Paper.pdf` describes a workflow scheduler named `WSH` and evaluates it against `HEFT` on three workflows. This repository currently implements only the `gene2life` workflow.
+`Main-Paper.pdf` evaluates `WSH` against `HEFT` on three workflows:
 
-## Gene2Life DAG
+- `gene2life`
+- `avianflu_small`
+- `epigenomics`
 
-The paper's Fig. 2 defines the `gene2life` structure as:
+This repository now implements all three workflow structures in Java.
+
+## Workflow Mapping
+
+### `gene2life`
+
+Paper structure:
 
 `blast1, blast2 -> clustalw1, clustalw2 -> dnapars, protpars -> drawgram1, drawgram2`
 
-This repository preserves those exact jobs and dependencies.
+Code:
 
-## Job Mapping
+- workflow spec: `src/main/java/org/gene2life/workflow/Gene2LifeWorkflowSpec.java`
+- tasks: `BLAST`, `CLUSTAL`, `DNAPARS`, `PROTPARS`, `DRAWGRAM`
 
-- `blast1` and `blast2`
-  Reads the generated query DNA plus one reference shard and emits top-hit tables.
-- `clustalw1` and `clustalw2`
-  Builds consensus alignments from blast hits.
-- `dnapars`
-  Builds a DNA-oriented phylogenetic tree from `clustalw1`.
-- `protpars`
-  Translates consensus DNA into proteins and builds a protein-oriented phylogenetic tree from `clustalw2`.
-- `drawgram1` and `drawgram2`
-  Materializes tree artifacts in text and DOT formats.
+### `avianflu_small`
+
+Paper structure:
+
+- several preprocessing stages
+- one `AutoGrid` stage
+- a large `Autodock` fanout
+
+Code mapping used here:
+
+- `prepare-receptor`
+- `prepare-gpf`
+- `prepare-dpf`
+- `auto-grid`
+- `autodock-001 ... autodock-100`
+
+This preserves the paper's 104-job scale while keeping the data products small.
+
+### `epigenomics`
+
+Paper structure:
+
+- one split stage
+- repeated chunk-processing stages
+- merge/index/final summary stages
+
+Code mapping used here:
+
+- `fastqSplit`
+- `filterContams-001 ... 024`
+- `sol2sanger-001 ... 024`
+- `fastq2bfq-001 ... 024`
+- `map-001 ... 024`
+- `mapMerge`
+- `maqIndex`
+- `pileup`
+
+This preserves the paper's 100-job scale.
 
 ## Scheduling Mapping
 
-- `HEFT`
-  Uses upward ranking based on static resource-aware duration estimates and assigns each job to the node with minimum earliest finish time.
-- `WSH`
-  Runs training tasks on the first node of every cluster, sorts clusters by observed finish time per job, classifies near-equal jobs as more IO-intensive, and expands candidate nodes cluster by cluster.
+### `HEFT`
 
-## Big-Data Mapping
+- upward rank is computed from a static resource-aware duration model
+- tasks are assigned to the node with minimum earliest finish time
+- communication cost is ignored, matching the paper's assumption
 
-The figure in the paper shows small communication payloads. That is not enough for a meaningful big-data execution environment, so this implementation keeps the workflow structure and scheduler behavior while scaling the actual input files through configurable data generation.
+### `WSH`
+
+- training tasks run on the first node of each cluster
+- cluster ordering is derived from measured training runtimes
+- near-equal runtimes are classified as more IO-oriented
+- node expansion follows the paper's cluster-by-cluster idea
+
+The implementation stabilizes training with warmup runs plus repeated measured runs and uses the median observed duration per cluster/job profile.
+
+## Cluster Mapping
+
+- `config/clusters-paper.csv` uses the literal paper-style per-node capacities
+- `config/clusters-z4-g5-paper-sweep.csv` maps that same heterogeneous pattern onto the Ubuntu server with CPU pinning
+- `config/clusters-z4-g5-paper-sweep-scaled.csv` keeps the same four-subcluster pattern but increases logical-node capacity
+
+## Data Mapping
+
+This project uses generated but domain-shaped datasets instead of no-op simulation:
+
+- `gene2life`: FASTA query and reference files
+- `avianflu_small`: receptor/grid/ligand tabular files
+- `epigenomics`: FASTQ reads, reference FASTA, contaminant motifs
+
+These datasets are intended to preserve workflow pressure and file-processing behavior, not biological exactness.
 
 ## Metric Mapping
 
 - `makespan`
-  Computed from actual job start and finish times.
+  actual wall-clock difference between first job start and last job finish
 - `speedup`
-  Computed as sequential runtime sum divided by actual makespan.
+  sequential runtime sum divided by makespan
 - `SLR`
-  Computed against a scheduler-independent modeled critical-path lower bound derived from the fastest logical node available for each workflow job. This avoids the invalid near-`1.0` result produced when the denominator is built from the same realized run.
+  makespan divided by a scheduler-independent modeled critical-path lower bound derived from the fastest logical node available for each workflow task
 
-## What Is Not Yet Implemented
+## What Still Differs From The Paper
 
-- Avianflu_small
-- Epigenomics
-- Native Hadoop or Hi-WAY integration
-- Per-node Docker orchestration
+- execution uses a standalone Java engine, not native Hi-WAY/Hadoop/YARN
+- Docker-isolated logical nodes share one host kernel
+- Java tasks approximate the original bioinformatics tools instead of invoking the original native binaries
+
+So the project now matches the workflow structures and scheduler comparison setup much more closely, but it is still a paper-inspired reproduction rather than a byte-for-byte recreation of the original software stack.

@@ -1,52 +1,84 @@
 package org.gene2life.model;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class WorkflowDefinition {
-    private final Map<JobId, JobDefinition> jobs;
+    private final String workflowId;
+    private final String displayName;
+    private final List<JobDefinition> jobs;
+    private final Map<String, JobDefinition> jobsById;
+    private final Map<String, Integer> orderByJobId;
 
-    private WorkflowDefinition(Map<JobId, JobDefinition> jobs) {
-        this.jobs = jobs;
+    public WorkflowDefinition(String workflowId, String displayName, List<JobDefinition> jobs) {
+        this.workflowId = workflowId;
+        this.displayName = displayName;
+        this.jobs = List.copyOf(jobs);
+        this.jobsById = new LinkedHashMap<>();
+        this.orderByJobId = new LinkedHashMap<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (int i = 0; i < jobs.size(); i++) {
+            JobDefinition job = jobs.get(i);
+            if (!seen.add(job.id())) {
+                throw new IllegalArgumentException("Duplicate job id in workflow " + workflowId + ": " + job.id());
+            }
+            for (String dependency : job.dependencies()) {
+                if (dependency.equals(job.id())) {
+                    throw new IllegalArgumentException("Job cannot depend on itself: " + job.id());
+                }
+                if (!seen.contains(dependency)) {
+                    throw new IllegalArgumentException(
+                            "Workflow " + workflowId + " must list dependencies before dependents. Missing prior job: "
+                                    + dependency + " for " + job.id());
+                }
+            }
+            jobsById.put(job.id(), job);
+            orderByJobId.put(job.id(), i);
+        }
     }
 
-    public static WorkflowDefinition gene2life() {
-        Map<JobId, JobDefinition> jobs = new EnumMap<>(JobId.class);
-        jobs.put(JobId.BLAST1, new JobDefinition(
-                JobId.BLAST1, "Blast 1", List.of(), "source DNA sequence", "0.1 MB blast hits"));
-        jobs.put(JobId.BLAST2, new JobDefinition(
-                JobId.BLAST2, "Blast 2", List.of(), "source DNA sequence", "0.1 MB blast hits"));
-        jobs.put(JobId.CLUSTALW1, new JobDefinition(
-                JobId.CLUSTALW1, "ClustalW 1", List.of(JobId.BLAST1), "blast1 hits", "0.1 MB alignment"));
-        jobs.put(JobId.CLUSTALW2, new JobDefinition(
-                JobId.CLUSTALW2, "ClustalW 2", List.of(JobId.BLAST2), "blast2 hits", "0.1 MB alignment"));
-        jobs.put(JobId.DNAPARS, new JobDefinition(
-                JobId.DNAPARS, "Dnapars", List.of(JobId.CLUSTALW1), "clustalw1 alignment", "4 KB DNA tree"));
-        jobs.put(JobId.PROTPARS, new JobDefinition(
-                JobId.PROTPARS, "Protpars", List.of(JobId.CLUSTALW2), "clustalw2 alignment", "4 KB protein tree"));
-        jobs.put(JobId.DRAWGRAM1, new JobDefinition(
-                JobId.DRAWGRAM1, "Drawgram 1", List.of(JobId.DNAPARS), "dnapars tree", "35 KB tree files"));
-        jobs.put(JobId.DRAWGRAM2, new JobDefinition(
-                JobId.DRAWGRAM2, "Drawgram 2", List.of(JobId.PROTPARS), "protpars tree", "35 KB tree files"));
-        return new WorkflowDefinition(jobs);
+    public String workflowId() {
+        return workflowId;
+    }
+
+    public String displayName() {
+        return displayName;
     }
 
     public List<JobDefinition> jobs() {
-        List<JobDefinition> values = new ArrayList<>(jobs.values());
-        values.sort(Comparator.comparing(def -> def.id().ordinal()));
-        return values;
+        return jobs;
     }
 
-    public JobDefinition job(JobId jobId) {
-        return jobs.get(jobId);
+    public JobDefinition job(String jobId) {
+        JobDefinition job = jobsById.get(jobId);
+        if (job == null) {
+            throw new IllegalArgumentException("Unknown job id: " + jobId);
+        }
+        return job;
     }
 
-    public List<JobDefinition> successors(JobId jobId) {
-        return jobs().stream()
+    public int orderOf(String jobId) {
+        Integer index = orderByJobId.get(jobId);
+        if (index == null) {
+            throw new IllegalArgumentException("Unknown job id: " + jobId);
+        }
+        return index;
+    }
+
+    public List<JobDefinition> successors(String jobId) {
+        return jobs.stream()
                 .filter(def -> def.dependencies().contains(jobId))
                 .toList();
+    }
+
+    public List<JobDefinition> trainingRepresentativeJobs() {
+        Map<String, JobDefinition> byProfile = new LinkedHashMap<>();
+        for (JobDefinition job : jobs) {
+            byProfile.putIfAbsent(job.trainingProfileKey(), job);
+        }
+        return List.copyOf(byProfile.values());
     }
 }

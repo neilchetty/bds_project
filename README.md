@@ -1,154 +1,197 @@
-# Gene2Life Java Implementation
+# Big-Workflow Scheduling Java Implementation
 
-This repository implements the `gene2life` portion of the paper _Scheduling of Big Data Workflows in the Hadoop Framework with Heterogeneous Computing Cluster_ in Java. The current scope is the paper's 8-job `gene2life` DAG only:
+This repository implements the paper's workflow-scheduling comparison in Java with real file-processing tasks, Docker-isolated logical nodes, and workflow-specific data generators. It now supports all three workflows discussed in the paper:
 
-`blast1, blast2 -> clustalw1, clustalw2 -> dnapars, protpars -> drawgram1, drawgram2`
+- `gene2life`: 8 jobs
+- `avianflu_small`: 104 jobs
+- `epigenomics`: 100 jobs
 
-The implementation keeps the paper's job names and dependencies, but runs real file-processing work on generated genomic-like data rather than using sleeps or a simulation-only model.
+The project is not a simulator-only model. Each task reads and writes real files and performs workload-faithful computation over generated bioinformatics-style data.
 
 ## What Is Implemented
 
-- A generated large-data input set with query DNA and two reference database shards.
-- Actual Java task executors for `blast`, `clustalw`, `dnapars`, `protpars`, and `drawgram`.
-- A `WSH` scheduler following the paper's training-task and cluster-ordering idea.
-- A `HEFT` scheduler for comparison.
-- Heterogeneous cluster profiles based on the paper's four-cluster layout.
-- Run reports with plan, metrics, makespan, speedup, and scheduling length ratio.
+- Modular workflow definitions under `src/main/java/org/gene2life/workflow`.
+- Real task executors for all supported workflow stages under `src/main/java/org/gene2life/task/WorkflowTaskExecutors.java`.
+- `WSH` and `HEFT` schedulers.
+- Docker-backed logical nodes for isolated execution on one physical host.
+- Paper-style heterogeneous cluster profiles and host-scaled profiles.
+- Run reports with schedule plans, actual run metrics, and scheduler comparison output.
+
+## Workflow Coverage
+
+### `gene2life`
+
+Paper DAG:
+
+`blast1, blast2 -> clustalw1, clustalw2 -> dnapars, protpars -> drawgram1, drawgram2`
+
+Data:
+
+- generated query DNA FASTA
+- two reference FASTA shards
+
+### `avianflu_small`
+
+Paper-sized DAG:
+
+- `prepare-receptor`
+- `prepare-gpf`
+- `prepare-dpf`
+- `auto-grid`
+- `autodock-001 ... autodock-100`
+
+Data:
+
+- receptor-feature tables
+- grid-template tables
+- ligand-library metadata
+- 100 ligand files
+
+### `epigenomics`
+
+Paper-sized DAG:
+
+- `fastqSplit`
+- `filterContams-001 ... 024`
+- `sol2sanger-001 ... 024`
+- `fastq2bfq-001 ... 024`
+- `map-001 ... 024`
+- `mapMerge`
+- `maqIndex`
+- `pileup`
+
+Data:
+
+- FASTQ reads
+- reference FASTA
+- contaminant motifs
+
+## Modularity
+
+New workflows are added by implementing one `WorkflowSpec`:
+
+- declare the DAG
+- declare data generation
+- resolve runtime inputs
+- resolve training inputs
+
+The scheduler, report writer, Docker executor, and CLI all operate on the generic `WorkflowSpec` interface.
 
 ## Project Layout
 
-- `src/main/java`: application source.
-- `config/clusters-paper.csv`: four-cluster profile matching the paper's Table 5 virtual-machine capacities.
-- `config/clusters-server.csv`: a server-oriented default profile for your Ubuntu host.
-- `config/clusters-z4-g5.csv`: tuned profile for the reported Ubuntu Z4 G5 workstation.
-- `config/clusters-z4-g5-paper-sweep.csv`: exact paper-style 12-node profile pinned onto the Ubuntu host.
-- `config/clusters-z4-g5-paper-sweep-scaled.csv`: scaled-up 12-node profile when you want stronger logical nodes on the same host.
-- `scripts/build.sh`: compile with plain `javac`.
-- `scripts/run.sh`: run the CLI.
-- `scripts/build-image.sh`: build the Docker image used for isolated logical-node execution.
-- `scripts/generate-cluster-config.sh`: generate a cluster CSV from the current server.
-- `scripts/server-benchmark.sh`: run a tuned server-side comparison.
+- `src/main/java/org/gene2life/cli`: CLI entrypoint and argument parsing
+- `src/main/java/org/gene2life/workflow`: modular workflow specifications
+- `src/main/java/org/gene2life/task`: workflow task executors
+- `src/main/java/org/gene2life/scheduler`: `WSH`, `HEFT`, duration model, training benchmarks
+- `src/main/java/org/gene2life/execution`: workflow executor, node runtime, Docker node pool
+- `config/clusters-paper.csv`: literal paper-style VM capacities
+- `config/clusters-z4-g5-paper-sweep.csv`: paper-style 12-node sweep profile pinned onto the Ubuntu host
+- `config/clusters-z4-g5-paper-sweep-scaled.csv`: stronger logical-node version of the same four-subcluster pattern
+- `scripts/build.sh`: plain `javac` build
+- `scripts/run.sh`: CLI launcher
+- `scripts/build-image.sh`: Docker image builder
+- `scripts/server-benchmark.sh`: workflow-aware benchmark launcher
 
-## Quick Start
-
-Build:
+## Build
 
 ```bash
 ./scripts/build.sh
 ```
 
-Generate data:
+## Quick Start
+
+Generate `gene2life` data:
 
 ```bash
 ./scripts/run.sh generate-data \
-  --workspace work/demo \
+  --workflow gene2life \
+  --workspace work/gene2life-demo \
   --query-count 128 \
   --reference-records-per-shard 40000 \
   --sequence-length 240
 ```
 
-Run WSH:
+Generate `avianflu_small` data:
+
+```bash
+./scripts/run.sh generate-data \
+  --workflow avianflu_small \
+  --workspace work/avianflu-demo \
+  --receptor-feature-count 256 \
+  --ligand-atom-count 48
+```
+
+Generate `epigenomics` data:
+
+```bash
+./scripts/run.sh generate-data \
+  --workflow epigenomics \
+  --workspace work/epigenomics-demo \
+  --reads-per-split 192 \
+  --read-length 80 \
+  --reference-record-count 640
+```
+
+Run a scheduler:
 
 ```bash
 ./scripts/run.sh run \
-  --workspace work/demo \
-  --data-root work/demo/data \
+  --workflow gene2life \
+  --workspace work/gene2life-demo \
+  --data-root work/gene2life-demo/data \
   --cluster-config config/clusters-server.csv \
   --scheduler wsh
 ```
 
-Run HEFT:
-
-```bash
-./scripts/run.sh run \
-  --workspace work/demo \
-  --data-root work/demo/data \
-  --cluster-config config/clusters-server.csv \
-  --scheduler heft
-```
-
-Run both:
+Run a comparison:
 
 ```bash
 ./scripts/run.sh compare \
-  --workspace work/demo \
-  --data-root work/demo/data \
+  --workflow gene2life \
+  --workspace work/gene2life-demo \
+  --data-root work/gene2life-demo/data \
   --cluster-config config/clusters-server.csv \
+  --rounds 4 \
   --training-warmup-runs 1 \
   --training-measure-runs 3
 ```
 
-## Big-Data Positioning
+## Runtime Positioning
 
-The paper's published `gene2life` figure shows small edge sizes, which are not enough for a meaningful big-data execution environment. This implementation therefore preserves the DAG and scheduling behavior while scaling the underlying input sizes through configurable data generation. For the Ubuntu server, start with:
+The workflow structures follow the paper, but the datasets are intentionally sized for practical repeated experiments on one server:
 
-```bash
-./scripts/run.sh generate-data \
-  --workspace work/server \
-  --query-count 256 \
-  --reference-records-per-shard 300000 \
-  --sequence-length 320
-```
+- `gene2life` is the heaviest workflow and remains the reference runtime target.
+- `avianflu_small` and `epigenomics` use smaller default datasets so they stay in the same general runtime band and do not exceed `gene2life` by default.
+- For benchmark runs, keep the dataset fixed while varying node count or scheduler.
 
-Increase `reference-records-per-shard` until disk, memory, and runtime match the target experiment budget.
+## Ubuntu Server Usage
 
-Do not use the Mac Mini for benchmark-sized runs. Use it only for compilation and smoke tests. The Ubuntu server should be the benchmark target.
+The intended benchmark target is the Ubuntu 24.04 workstation, not the Mac Mini.
 
-## Ubuntu 24.04 Server Workflow
-
-1. Install Java 17 or newer.
-2. Build the code with `./scripts/build.sh`.
-3. Generate data under a workspace on the server's local disk.
-4. Run both schedulers against the same generated dataset.
-5. Compare the resulting `work/.../wsh/README.md`, `schedule-plan.csv`, and `run-metrics.csv` with the HEFT equivalents.
-
-One-command server benchmark:
+Build and run a default benchmark:
 
 ```bash
 chmod +x ./scripts/server-benchmark.sh
 ./scripts/server-benchmark.sh
 ```
 
-Override dataset size through environment variables:
+Run another workflow through the same benchmark harness:
 
 ```bash
-WORKSPACE=/data/gene2life \
-QUERY_COUNT=256 \
-REFERENCE_RECORDS_PER_SHARD=500000 \
-SEQUENCE_LENGTH=320 \
-./scripts/server-benchmark.sh
-```
-
-Run with the tuned Z4 G5 profile and explicit JVM settings:
-
-```bash
+WORKFLOW=epigenomics \
 PROFILE=medium \
-CLUSTER_CONFIG=./config/clusters-z4-g5.csv \
-GENE2LIFE_JAVA_OPTS="-Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication" \
+CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
 COMPARE_ROUNDS=4 \
 EXECUTOR=docker \
 ./scripts/server-benchmark.sh
 ```
 
-Auto-generate a cluster config on the server itself:
-
-```bash
-chmod +x ./scripts/generate-cluster-config.sh
-./scripts/generate-cluster-config.sh ./config/clusters-autogen.csv
-```
-
-Detailed server guidance is in `docs/server-tuning.md`.
-
-For a fairer comparison on one physical server, `compare` alternates scheduler order across rounds instead of always running WSH first and HEFT second. This reduces JIT and filesystem-cache bias. WSH training also uses repeated measurements per cluster and job so one noisy sample does not reshuffle the cluster order.
-
-Docker isolation is now built into the execution path: each WSH training job and each scheduled workflow job can run in a constrained container representing the assigned logical node.
-In Docker mode, each logical node is now a persistent named container for the lifetime of one scheduler run, and jobs execute inside it with `docker exec`.
-
-To get closer to the paper's node-count experiments on the same machine, use:
+Run the paper-style node-count sweep:
 
 ```bash
 for nodes in 4 7 10 12; do
   WORKSPACE="/data/gene2life-nodes-${nodes}" \
+  WORKFLOW=gene2life \
   CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
   MAX_NODES="$nodes" \
   COMPARE_ROUNDS=4 \
@@ -161,35 +204,47 @@ done
 
 ## Docker
 
-The repository includes a `Dockerfile` and image-build helper for packaging the CLI once the classes are built:
+Build the execution image:
 
 ```bash
 ./scripts/build-image.sh gene2life-java:latest
 ```
 
-Example run:
+The benchmark launcher uses this image automatically when `EXECUTOR=docker`. In Docker mode, each logical node is a persistent named container for one scheduler run, and jobs execute inside it with `docker exec`.
 
-```bash
-docker run --rm -v "$PWD/work:/work" gene2life-java run \
-  --workspace /work/demo \
-  --data-root /work/demo/data \
-  --cluster-config /app/config/clusters-server.csv \
-  --scheduler wsh
-```
+## Metrics
 
-The server benchmark script uses this image to execute node-isolated jobs automatically when `EXECUTOR=docker`.
+- `makespan`: actual wall-clock makespan from recorded job start/finish times
+- `speedup`: sequential runtime sum divided by makespan
+- `SLR`: makespan divided by a scheduler-independent modeled critical-path lower bound
 
-## Paper Mapping Notes
+For tiny smoke datasets, `SLR` can clamp to `1.0` because the static lower bound is intentionally conservative. Use benchmark-sized datasets for meaningful `SLR` trends.
 
-- Workflow structure comes directly from Fig. 2 in the paper.
-- Communication cost is ignored during ranking and allocation, matching the paper.
-- WSH uses training runs on the first node of each cluster before building the plan.
-- Reported `SLR` now uses a scheduler-independent modeled critical-path lower bound instead of the realized durations from the same run.
-- When job runtimes across clusters are nearly equal, the implementation classifies the job as more IO-intensive and breaks ties toward the lower-powered cluster, matching the paper's stated policy.
-- Detailed paper-to-code mapping is documented in `docs/paper-mapping.md`.
+## Verification
 
-## Current Limitations
+The current codebase has been compiled and smoke-tested locally for:
 
-- This is a standalone Java workflow engine, not a drop-in Hi-WAY/Hadoop replacement.
-- The biological tasks are workload-faithful Java implementations, not wrappers around native `blast`, `clustalw`, or PHYLIP binaries.
-- The paper's exact runtime numbers depend on its original environment; this code is intended to reproduce the workflow structure and compare WSH versus HEFT on real large-file workloads in your own environment.
+- `gene2life`
+- `avianflu_small`
+- `epigenomics`
+
+Those smoke runs validate:
+
+- data generation
+- WSH training
+- HEFT planning
+- DAG execution
+- report generation
+
+Heavy Docker benchmarks should still be run on the Ubuntu server.
+
+## Limitations
+
+- This is a standalone Java workflow engine, not a full Hi-WAY/Hadoop deployment.
+- The biological tools are Java workload approximations, not wrappers around native `blast`, `clustalw`, `autodock`, `maq`, or PHYLIP binaries.
+- Docker-isolated logical nodes on one host are closer to the paper than one-JVM execution, but still not identical to separate VMs or a distributed Hadoop cluster.
+
+## Additional Documentation
+
+- `docs/paper-mapping.md`
+- `docs/server-tuning.md`

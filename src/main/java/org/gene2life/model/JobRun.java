@@ -3,7 +3,7 @@ package org.gene2life.model;
 import java.nio.file.Path;
 
 public record JobRun(
-        JobId jobId,
+        String jobId,
         String clusterId,
         String nodeId,
         String schedulerName,

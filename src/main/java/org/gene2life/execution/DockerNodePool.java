@@ -1,9 +1,9 @@
 package org.gene2life.execution;
 
-import org.gene2life.model.JobId;
 import org.gene2life.model.NodeProfile;
 import org.gene2life.task.TaskInputs;
 import org.gene2life.task.TaskResult;
+import org.gene2life.workflow.WorkflowSpec;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -31,7 +31,7 @@ public final class DockerNodePool implements AutoCloseable {
         }
     }
 
-    public TaskResult execute(NodeProfile nodeProfile, JobId jobId, TaskInputs inputs) throws IOException, InterruptedException {
+    public TaskResult execute(WorkflowSpec workflowSpec, NodeProfile nodeProfile, String jobId, TaskInputs inputs) throws IOException, InterruptedException {
         String containerName = findContainerName(nodeProfile);
         List<String> command = new java.util.ArrayList<>();
         command.add("docker");
@@ -42,13 +42,19 @@ public final class DockerNodePool implements AutoCloseable {
         command.add("/app/classes");
         command.add("org.gene2life.cli.Main");
         command.add("run-job");
+        command.add("--workflow");
+        command.add(workflowSpec.workflowId());
         command.add("--job");
-        command.add(jobId.cliName());
-        command.add("--primary-input");
-        command.add(inputs.primaryInput().toAbsolutePath().toString());
-        if (inputs.secondaryInput() != null) {
-            command.add("--secondary-input");
-            command.add(inputs.secondaryInput().toAbsolutePath().toString());
+        command.add(jobId);
+        command.add("--inputs");
+        command.add(inputs.inputs().stream()
+                .map(path -> path.toAbsolutePath().toString())
+                .collect(java.util.stream.Collectors.joining(",")));
+        if (!inputs.parameters().isEmpty()) {
+            command.add("--params");
+            command.add(inputs.parameters().entrySet().stream()
+                    .map(entry -> entry.getKey() + "=" + entry.getValue())
+                    .collect(java.util.stream.Collectors.joining(",")));
         }
         command.add("--output-dir");
         command.add(inputs.outputDirectory().toAbsolutePath().toString());
@@ -68,14 +74,14 @@ public final class DockerNodePool implements AutoCloseable {
         byte[] combined = process.getInputStream().readAllBytes();
         int exit = process.waitFor();
         if (exit != 0) {
-            throw new IOException("Docker exec failed with exit code " + exit + " for " + jobId.cliName()
+            throw new IOException("Docker exec failed with exit code " + exit + " for " + jobId
                     + System.lineSeparator() + new String(combined, StandardCharsets.UTF_8));
         }
-        Path outputPath = JobOutputs.outputPath(jobId, inputs.outputDirectory());
+        Path outputPath = JobOutputs.outputPath(workflowSpec, jobId, inputs.outputDirectory());
         if (!Files.exists(outputPath)) {
             throw new IOException("Expected output not found after docker exec: " + outputPath);
         }
-        return new TaskResult(outputPath, JobOutputs.outputDescription(jobId));
+        return new TaskResult(outputPath, JobOutputs.outputDescription(workflowSpec, jobId));
     }
 
     @Override

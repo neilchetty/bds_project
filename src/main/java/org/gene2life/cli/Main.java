@@ -2,14 +2,12 @@ package org.gene2life.cli;
 
 import org.gene2life.config.ClusterConfigLoader;
 import org.gene2life.config.ClusterProfiles;
-import org.gene2life.data.DataGenerator;
 import org.gene2life.execution.DockerNodePool;
 import org.gene2life.execution.ExecutionMode;
 import org.gene2life.execution.JobOutputs;
 import org.gene2life.execution.TrainingRunner;
 import org.gene2life.execution.WorkflowExecutor;
 import org.gene2life.model.ClusterProfile;
-import org.gene2life.model.JobId;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.NodeProfile;
 import org.gene2life.model.PlanAssignment;
@@ -22,12 +20,15 @@ import org.gene2life.scheduler.Scheduler;
 import org.gene2life.scheduler.TrainingBenchmarks;
 import org.gene2life.scheduler.WshScheduler;
 import org.gene2life.task.TaskExecutor;
-import org.gene2life.task.Gene2LifeTaskExecutors;
+import org.gene2life.task.TaskInputs;
+import org.gene2life.workflow.WorkflowRegistry;
+import org.gene2life.workflow.WorkflowSpec;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -47,23 +48,21 @@ public final class Main {
     }
 
     private static void generateData(CliArguments cli) throws Exception {
+        WorkflowSpec workflowSpec = workflowSpec(cli);
         Path workspace = Path.of(cli.option("workspace", "work/demo"));
-        Path dataRoot = workspace.resolve("data");
-        Files.createDirectories(workspace);
-        DataGenerator generator = new DataGenerator(Long.parseLong(cli.option("seed", "42")));
-        generator.generate(
-                dataRoot,
-                cli.optionInt("query-count", 128),
-                cli.optionInt("reference-records-per-shard", 40000),
-                cli.optionInt("sequence-length", 240),
-                cli.optionInt("training-fraction-percent", 2));
-        System.out.println("Generated data under " + dataRoot.toAbsolutePath());
+        Path dataRoot = Path.of(cli.option("data-root", workspace.resolve("data").toString()));
+        Files.createDirectories(dataRoot);
+        workflowSpec.generateData(dataRoot, cli);
+        System.out.println("Generated " + workflowSpec.workflowId() + " data under " + dataRoot.toAbsolutePath());
     }
 
     private static void runScheduler(CliArguments cli) throws Exception {
+        WorkflowSpec workflowSpec = workflowSpec(cli);
+        Path workspace = Path.of(cli.option("workspace", "work/run"));
         runSchedulerInternal(
-                Path.of(cli.option("workspace", "work/run")),
-                Path.of(cli.option("data-root", Path.of(cli.option("workspace", "work/run")).resolve("data").toString())),
+                workflowSpec,
+                workspace,
+                Path.of(cli.option("data-root", workspace.resolve("data").toString())),
                 Path.of(cli.option("cluster-config", "config/clusters-server.csv")),
                 cli.option("scheduler", "wsh"),
                 cli.optionInt("max-nodes", 0),
@@ -74,6 +73,7 @@ public final class Main {
     }
 
     private static RunOutcome runSchedulerInternal(
+            WorkflowSpec workflowSpec,
             Path workspace,
             Path dataRoot,
             Path clusterConfig,
@@ -83,18 +83,21 @@ public final class Main {
             String dockerImage,
             int trainingWarmupRuns,
             int trainingMeasureRuns) throws Exception {
-        WorkflowDefinition workflow = WorkflowDefinition.gene2life();
-        Map<org.gene2life.model.JobId, TaskExecutor> executors = Gene2LifeTaskExecutors.executors();
+        WorkflowDefinition workflow = workflowSpec.definition();
+        Map<String, TaskExecutor> executors = workflowSpec.executors();
         List<ClusterProfile> clusters = ClusterProfiles.limitRoundRobin(ClusterConfigLoader.load(clusterConfig), maxNodes);
         DockerNodePool dockerNodePool = executionMode == ExecutionMode.DOCKER
-                ? new DockerNodePool(dockerImage, commonAncestor(workspace.toAbsolutePath(), dataRoot.toAbsolutePath()),
-                schedulerName + "-" + workspace.getFileName(), clusters.stream().flatMap(cluster -> cluster.nodes().stream()).toList())
+                ? new DockerNodePool(
+                dockerImage,
+                commonAncestor(workspace.toAbsolutePath(), dataRoot.toAbsolutePath()),
+                workflow.workflowId() + "-" + schedulerName + "-" + workspace.getFileName(),
+                clusters.stream().flatMap(cluster -> cluster.nodes().stream()).toList())
                 : null;
         Scheduler scheduler = scheduler(schedulerName);
         TrainingBenchmarks benchmarks;
         try {
             benchmarks = schedulerName.equalsIgnoreCase("wsh")
-                    ? new TrainingRunner(executors, executionMode, dockerNodePool, trainingWarmupRuns, trainingMeasureRuns)
+                    ? new TrainingRunner(workflowSpec, executors, executionMode, dockerNodePool, trainingWarmupRuns, trainingMeasureRuns)
                     .benchmark(dataRoot, clusters)
                     : TrainingBenchmarks.empty();
         } catch (Exception exception) {
@@ -105,11 +108,11 @@ public final class Main {
         }
         List<PlanAssignment> plan = scheduler.buildPlan(workflow, clusters, benchmarks);
         Path runRoot = workspace.resolve(scheduler.name().toLowerCase());
-        WorkflowExecutor executor = new WorkflowExecutor(workflow, executors, clusters, executionMode, dockerNodePool);
+        WorkflowExecutor executor = new WorkflowExecutor(workflowSpec, executors, clusters, executionMode, dockerNodePool);
         try {
             List<JobRun> runs = executor.execute(dataRoot, runRoot, plan);
             new ReportWriter().writeRunReport(runRoot, workflow, clusters, scheduler.name(), benchmarks, plan, runs);
-            System.out.println("Completed " + scheduler.name() + " run under " + runRoot.toAbsolutePath());
+            System.out.println("Completed " + scheduler.name() + " " + workflow.workflowId() + " run under " + runRoot.toAbsolutePath());
             return new RunOutcome(scheduler.name(), runRoot, runs);
         } finally {
             executor.close();
@@ -120,6 +123,7 @@ public final class Main {
     }
 
     private static void compare(CliArguments cli) throws Exception {
+        WorkflowSpec workflowSpec = workflowSpec(cli);
         Path workspace = Path.of(cli.option("workspace", "work/compare"));
         Path dataRoot = Path.of(cli.option("data-root", workspace.resolve("data").toString()));
         Path clusterConfig = Path.of(cli.option("cluster-config", "config/clusters-server.csv"));
@@ -136,42 +140,48 @@ public final class Main {
             Path roundWorkspace = workspace.resolve(String.format("round-%02d", round));
             if (wshFirst) {
                 RunOutcome wsh = runSchedulerInternal(
-                        roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
+                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
                         trainingWarmupRuns, trainingMeasureRuns);
                 RunOutcome heft = runSchedulerInternal(
-                        roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
+                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
                         trainingWarmupRuns, trainingMeasureRuns);
                 roundOutcomes.add(new RoundOutcome(round, "WSH->HEFT", wsh, heft));
             } else {
                 RunOutcome heft = runSchedulerInternal(
-                        roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
+                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
                         trainingWarmupRuns, trainingMeasureRuns);
                 RunOutcome wsh = runSchedulerInternal(
-                        roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
+                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
                         trainingWarmupRuns, trainingMeasureRuns);
                 roundOutcomes.add(new RoundOutcome(round, "HEFT->WSH", wsh, heft));
             }
         }
-        writeComparisonReport(workspace.resolve("comparison.md"), WorkflowDefinition.gene2life(), clusters, roundOutcomes);
+        writeComparisonReport(workspace.resolve("comparison.md"), workflowSpec.definition(), clusters, roundOutcomes);
         System.out.println("Comparison runs completed under " + workspace.toAbsolutePath());
     }
 
     private static void runJob(CliArguments cli) throws Exception {
-        JobId jobId = JobId.fromCliName(cli.option("job", ""));
-        Path primaryInput = Path.of(cli.option("primary-input", ""));
-        String secondary = cli.option("secondary-input", "");
-        Path secondaryInput = secondary.isBlank() ? null : Path.of(secondary);
+        WorkflowSpec workflowSpec = workflowSpec(cli);
+        String jobId = cli.option("job", "");
         Path outputDir = Path.of(cli.option("output-dir", ""));
         Files.createDirectories(outputDir);
+        TaskExecutor executor = workflowSpec.executors().get(jobId);
+        if (executor == null) {
+            throw new IllegalArgumentException("Unknown job for workflow " + workflowSpec.workflowId() + ": " + jobId);
+        }
+        TaskInputs inputs = new TaskInputs(parsePathList(cli.option("inputs", "")), outputDir, parseParams(cli.option("params", "")));
         NodeProfile nodeProfile = new NodeProfile(
                 cli.option("cluster-id", "docker-cluster"),
                 cli.option("node-id", "docker-node"),
                 cli.optionInt("cpu-threads", 1),
                 cli.optionInt("io-buffer-kb", 256),
                 cli.optionInt("memory-mb", 1024));
-        TaskExecutor executor = Gene2LifeTaskExecutors.executors().get(jobId);
-        executor.execute(new org.gene2life.task.TaskInputs(primaryInput, secondaryInput, outputDir), nodeProfile);
-        System.out.println("Completed job " + jobId.cliName() + " -> " + JobOutputs.outputPath(jobId, outputDir));
+        executor.execute(inputs, nodeProfile);
+        System.out.println("Completed job " + jobId + " -> " + JobOutputs.outputPath(workflowSpec, jobId, outputDir));
+    }
+
+    private static WorkflowSpec workflowSpec(CliArguments cli) {
+        return WorkflowRegistry.byId(cli.option("workflow", "gene2life"));
     }
 
     private static Scheduler scheduler(String name) {
@@ -194,6 +204,8 @@ public final class Main {
         double makespanImprovement = percentageImprovement(heftAverage.makespanMillis(), wshAverage.makespanMillis());
         StringBuilder body = new StringBuilder();
         body.append("# Scheduler Comparison\n\n");
+        body.append("## Workflow\n\n");
+        body.append("- Workflow: ").append(workflow.displayName()).append(" (`").append(workflow.workflowId()).append("`)\n\n");
         body.append("## Aggregate\n\n");
         body.append("- Rounds: ").append(rounds.size()).append('\n');
         body.append("- WSH average makespan: ").append(wshAverage.makespanMillis()).append(" ms\n");
@@ -245,10 +257,40 @@ public final class Main {
         return new RunMetrics(Math.round(makespan), Math.round(sequential), Math.round(criticalPath), speedup, slr);
     }
 
+    private static List<Path> parsePathList(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        List<Path> paths = new ArrayList<>();
+        for (String value : raw.split(",")) {
+            if (!value.isBlank()) {
+                paths.add(Path.of(value));
+            }
+        }
+        return List.copyOf(paths);
+    }
+
+    private static Map<String, String> parseParams(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Map.of();
+        }
+        Map<String, String> params = new LinkedHashMap<>();
+        for (String token : raw.split(",")) {
+            if (token.isBlank()) {
+                continue;
+            }
+            int separator = token.indexOf('=');
+            if (separator <= 0) {
+                throw new IllegalArgumentException("Invalid parameter token: " + token);
+            }
+            params.put(token.substring(0, separator), token.substring(separator + 1));
+        }
+        return Map.copyOf(params);
+    }
+
     private record RunOutcome(String schedulerName, Path runRoot, List<JobRun> runs) {
     }
 
     private record RoundOutcome(int roundNumber, String order, RunOutcome wsh, RunOutcome heft) {
     }
-
 }
