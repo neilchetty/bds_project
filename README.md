@@ -202,6 +202,8 @@ for nodes in 4 7 10 12; do
 done
 ```
 
+The benchmark scripts now reuse one dataset per workflow by default. Generation parameters are stored in `DATA_ROOT/.generation-metadata.env`, and regeneration happens only when those parameters change.
+
 ## Docker
 
 Build the execution image:

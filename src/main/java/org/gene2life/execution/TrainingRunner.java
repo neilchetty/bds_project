@@ -3,6 +3,7 @@ package org.gene2life.execution;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.NodeProfile;
+import org.gene2life.scheduler.DurationModel;
 import org.gene2life.scheduler.TrainingBenchmarks;
 import org.gene2life.task.TaskExecutor;
 import org.gene2life.task.TaskInputs;
@@ -17,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 public final class TrainingRunner {
+    private static final long MEASUREMENT_NOISE_FLOOR_MS = 2_000L;
+
     private final WorkflowSpec workflowSpec;
     private final Map<String, TaskExecutor> executors;
     private final ExecutionMode executionMode;
@@ -61,10 +64,9 @@ public final class TrainingRunner {
             }
         }
         for (JobDefinition job : workflowSpec.definition().trainingRepresentativeJobs()) {
-            List<Long> values = clusters.stream().map(cluster -> durations.get(job.trainingProfileKey()).get(cluster.clusterId())).sorted().toList();
-            long min = values.get(0);
-            long max = values.get(values.size() - 1);
-            classifications.put(job.trainingProfileKey(), max <= Math.max(1L, (long) (min * 1.12)) ? "io" : "compute");
+            Map<String, Long> corrected = correctedDurations(job, clusters, durations.get(job.trainingProfileKey()));
+            durations.put(job.trainingProfileKey(), corrected);
+            classifications.put(job.trainingProfileKey(), job.taskType().defaultClassification());
         }
         return new TrainingBenchmarks(durations, classifications, warmupRuns, measurementRuns);
     }
@@ -83,5 +85,20 @@ public final class TrainingRunner {
             return sorted.get(middle);
         }
         return Math.round((sorted.get(middle - 1) + sorted.get(middle)) / 2.0);
+    }
+
+    private Map<String, Long> correctedDurations(
+            JobDefinition job,
+            List<ClusterProfile> clusters,
+            Map<String, Long> measuredDurations) {
+        long maxMeasured = measuredDurations.values().stream().mapToLong(Long::longValue).max().orElse(0L);
+        if (maxMeasured > MEASUREMENT_NOISE_FLOOR_MS) {
+            return measuredDurations;
+        }
+        Map<String, Long> fallback = new HashMap<>();
+        for (ClusterProfile cluster : clusters) {
+            fallback.put(cluster.clusterId(), DurationModel.estimateDuration(job, cluster.firstNode()));
+        }
+        return fallback;
     }
 }

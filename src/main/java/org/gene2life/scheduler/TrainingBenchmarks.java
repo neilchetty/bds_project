@@ -50,26 +50,45 @@ public final class TrainingBenchmarks {
 
     public List<String> sortedClusters(JobDefinition job, List<ClusterProfile> clusters) {
         if (!hasMeasurements(job)) {
-            return clusters.stream()
-                    .sorted((left, right) -> Integer.compare(right.maxCpuThreads(), left.maxCpuThreads()))
-                    .map(ClusterProfile::clusterId)
-                    .toList();
+            return staticClusterOrder(job, clusters);
         }
+        String classification = classification(job);
         return clusters.stream()
                 .sorted((left, right) -> {
                     long leftDuration = duration(job, left.clusterId());
                     long rightDuration = duration(job, right.clusterId());
+                    if (effectivelyEqual(leftDuration, rightDuration, classification)) {
+                        if ("io".equals(classification)) {
+                            return Integer.compare(left.maxCpuThreads(), right.maxCpuThreads());
+                        }
+                        return Integer.compare(right.maxCpuThreads(), left.maxCpuThreads());
+                    }
                     int compare = Long.compare(leftDuration, rightDuration);
                     if (compare != 0) {
                         return compare;
                     }
-                    if ("io".equals(classification(job))) {
+                    return Integer.compare(left.clusterId().hashCode(), right.clusterId().hashCode());
+                })
+                .map(ClusterProfile::clusterId)
+                .toList();
+    }
+
+    private List<String> staticClusterOrder(JobDefinition job, List<ClusterProfile> clusters) {
+        return clusters.stream()
+                .sorted((left, right) -> {
+                    if ("io".equals(job.taskType().defaultClassification())) {
                         return Integer.compare(left.maxCpuThreads(), right.maxCpuThreads());
                     }
                     return Integer.compare(right.maxCpuThreads(), left.maxCpuThreads());
                 })
                 .map(ClusterProfile::clusterId)
                 .toList();
+    }
+
+    private boolean effectivelyEqual(long leftDuration, long rightDuration, String classification) {
+        long minimum = Math.max(1L, Math.min(leftDuration, rightDuration));
+        double threshold = "io".equals(classification) ? 0.25 : 0.15;
+        return Math.abs(leftDuration - rightDuration) <= Math.max(25L, Math.round(minimum * threshold));
     }
 
     public static TrainingBenchmarks empty() {

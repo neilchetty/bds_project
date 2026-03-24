@@ -51,6 +51,12 @@ The benchmark launcher is now workflow-aware:
 
 The defaults intentionally keep `avianflu_small` and `epigenomics` in the same rough runtime class as `gene2life`, not heavier.
 
+The benchmark scripts also reuse datasets by default:
+
+- `DATA_ROOT` can point to a shared per-workflow dataset directory
+- `REUSE_DATA=true` skips regeneration when the requested generation parameters match `DATA_ROOT/.generation-metadata.env`
+- this is the preferred mode for paper-style node-count sweeps because all node counts then run against the same workflow input
+
 ## Commands
 
 Generate a cluster profile from the host itself:

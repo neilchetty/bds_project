@@ -98,12 +98,14 @@ public final class WorkflowTaskExecutors {
         try {
             List<String> rows = pool.submit(() -> hits.entrySet().parallelStream()
                     .map(entry -> {
-                        String consensus = consensus(entry.getValue().stream().map(Hit::sequence).toList());
+                        List<String> sequences = entry.getValue().stream().map(Hit::sequence).toList();
+                        String consensus = consensus(sequences);
                         double avgScore = entry.getValue().stream().mapToDouble(Hit::score).average().orElse(0.0);
+                        double alignmentSignal = alignmentSignal(sequences, consensus, nodeProfile.cpuThreads());
                         String organism = majority(entry.getValue().stream().map(Hit::organism).toList());
                         String function = majority(entry.getValue().stream().map(Hit::function).toList());
                         return entry.getKey() + "\t" + entry.getValue().size() + "\t"
-                                + String.format("%.5f", avgScore) + "\t" + organism + "\t" + function + "\t" + consensus;
+                                + String.format("%.5f", avgScore + alignmentSignal) + "\t" + organism + "\t" + function + "\t" + consensus;
                     })
                     .sorted()
                     .toList()).get();
@@ -491,10 +493,13 @@ public final class WorkflowTaskExecutors {
     }
 
     private static String buildTree(List<SequenceNode> nodes) {
-        List<String> labels = nodes.stream()
-                .sorted(Comparator.comparing(SequenceNode::name))
-                .map(node -> node.name + ":" + String.format("%.4f", Math.max(0.1, 1.0 - gcRatio(node.sequence))))
-                .toList();
+        double[] averageDistances = averagePairwiseDistances(nodes);
+        List<String> labels = new ArrayList<>();
+        for (int i = 0; i < nodes.size(); i++) {
+            SequenceNode node = nodes.get(i);
+            labels.add(node.name + ":" + String.format("%.4f", Math.max(0.1, averageDistances[i])));
+        }
+        labels.sort(Comparator.naturalOrder());
         return "(" + String.join(",", labels) + ");";
     }
 
@@ -586,13 +591,29 @@ public final class WorkflowTaskExecutors {
     private static Alignment bestAlignment(String readId, String readSequence, List<ReferenceSequence> references) {
         String readSignature = signature(padSequence(readSequence, 12));
         Alignment best = new Alignment(readId, "unmapped", 0, 0.0);
+        List<ReferenceSequence> candidates = new ArrayList<>();
         for (ReferenceSequence reference : references) {
             double score = jaccard(readSignature, reference.signature());
+            if (candidates.size() < 4 || score >= best.score - 0.08) {
+                candidates.add(reference);
+            }
             if (score > best.score) {
                 best = new Alignment(readId, reference.id(), Math.abs(readSequence.hashCode()) % Math.max(1, reference.sequence().length()), score);
             }
         }
-        return best;
+        Alignment refined = best;
+        for (ReferenceSequence candidate : candidates) {
+            double structuralScore = windowedSimilarity(readSequence, candidate.sequence());
+            double totalScore = structuralScore + jaccard(readSignature, candidate.signature());
+            if (totalScore > refined.score) {
+                refined = new Alignment(
+                        readId,
+                        candidate.id(),
+                        bestPosition(readSequence, candidate.sequence()),
+                        totalScore);
+            }
+        }
+        return refined;
     }
 
     private static String padSequence(String sequence, int minimum) {
@@ -691,6 +712,99 @@ public final class WorkflowTaskExecutors {
         long intersection = a.stream().filter(b::contains).count();
         long union = a.size() + b.size() - intersection;
         return union == 0 ? 0.0 : (double) intersection / union;
+    }
+
+    private static double alignmentSignal(List<String> sequences, String consensus, int cpuThreads) {
+        if (sequences.isEmpty()) {
+            return 0.0;
+        }
+        long mismatches = 0L;
+        int refinementPasses = Math.max(1, cpuThreads);
+        for (int pass = 0; pass < refinementPasses; pass++) {
+            for (int i = 0; i < sequences.size(); i++) {
+                mismatches += mismatchCount(sequences.get(i), consensus);
+                for (int j = i + 1; j < sequences.size(); j++) {
+                    mismatches += mismatchCount(sequences.get(i), sequences.get(j));
+                }
+            }
+        }
+        return mismatches / (double) (Math.max(1, sequences.size()) * 10_000L);
+    }
+
+    private static double[] averagePairwiseDistances(List<SequenceNode> nodes) {
+        double[] totals = new double[nodes.size()];
+        if (nodes.size() <= 1) {
+            return totals;
+        }
+        for (int i = 0; i < nodes.size(); i++) {
+            for (int j = i + 1; j < nodes.size(); j++) {
+                double distance = normalizedDistance(nodes.get(i).sequence, nodes.get(j).sequence);
+                totals[i] += distance;
+                totals[j] += distance;
+            }
+        }
+        double divisor = Math.max(1, nodes.size() - 1);
+        for (int i = 0; i < totals.length; i++) {
+            totals[i] /= divisor;
+        }
+        return totals;
+    }
+
+    private static double normalizedDistance(String left, String right) {
+        int comparedLength = Math.max(left.length(), right.length());
+        if (comparedLength == 0) {
+            return 0.0;
+        }
+        return mismatchCount(left, right) / (double) comparedLength;
+    }
+
+    private static int mismatchCount(String left, String right) {
+        int comparedLength = Math.max(left.length(), right.length());
+        int mismatches = 0;
+        for (int i = 0; i < comparedLength; i++) {
+            char leftBase = i < left.length() ? left.charAt(i) : '-';
+            char rightBase = i < right.length() ? right.charAt(i) : '-';
+            if (leftBase != rightBase) {
+                mismatches++;
+            }
+        }
+        return mismatches;
+    }
+
+    private static double windowedSimilarity(String readSequence, String referenceSequence) {
+        int bestMatches = 0;
+        int limit = Math.max(1, referenceSequence.length() - readSequence.length() + 1);
+        int stride = Math.max(1, readSequence.length() / 8);
+        for (int start = 0; start < limit; start += stride) {
+            int matches = 0;
+            for (int i = 0; i < readSequence.length() && start + i < referenceSequence.length(); i++) {
+                if (readSequence.charAt(i) == referenceSequence.charAt(start + i)) {
+                    matches++;
+                }
+            }
+            bestMatches = Math.max(bestMatches, matches);
+        }
+        return bestMatches / (double) Math.max(1, readSequence.length());
+    }
+
+    private static int bestPosition(String readSequence, String referenceSequence) {
+        int bestPosition = 0;
+        int bestMatches = -1;
+        int limit = Math.max(1, referenceSequence.length() - readSequence.length() + 1);
+        int stride = Math.max(1, readSequence.length() / 8);
+        for (int start = 0; start < limit; start += stride) {
+            int matches = 0;
+            for (int i = 0; i < readSequence.length() && start + i < referenceSequence.length(); i++) {
+                if (readSequence.charAt(i) == referenceSequence.charAt(start + i)) {
+                    matches++;
+                }
+            }
+            if (matches > bestMatches) {
+                bestMatches = matches;
+                bestPosition = start;
+            }
+        }
+        return bestPosition;
     }
 
     private static FastaRecord nextFastaRecord(BufferedReader reader) throws IOException {

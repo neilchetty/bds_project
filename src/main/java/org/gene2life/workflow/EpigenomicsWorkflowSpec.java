@@ -121,24 +121,24 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
 
     private static WorkflowDefinition buildDefinition(int splitCount) {
         List<JobDefinition> jobs = new ArrayList<>();
-        jobs.add(new JobDefinition("fastqSplit", "fastQSplit", List.of(), TaskType.FASTQ_SPLIT, 12_000L,
+        jobs.add(new JobDefinition("fastqSplit", "fastQSplit", List.of(), TaskType.FASTQ_SPLIT, 1_800L,
                 "fastqSplit", "raw FASTQ", "FASTQ chunk manifest", Map.of("chunk_count", Integer.toString(splitCount))));
         for (int i = 1; i <= splitCount; i++) {
             String id = pad(i);
-            jobs.add(new JobDefinition("filterContams-" + id, "filterContams " + id, List.of("fastqSplit"), TaskType.FILTER_CONTAMS, 14_000L,
+            jobs.add(new JobDefinition("filterContams-" + id, "filterContams " + id, List.of("fastqSplit"), TaskType.FILTER_CONTAMS, 2_100L,
                     "filterContams", "FASTQ chunk", "filtered chunk", Map.of("chunk_id", id)));
-            jobs.add(new JobDefinition("sol2sanger-" + id, "sol2sanger " + id, List.of("filterContams-" + id), TaskType.SOL2SANGER, 12_000L,
+            jobs.add(new JobDefinition("sol2sanger-" + id, "sol2sanger " + id, List.of("filterContams-" + id), TaskType.SOL2SANGER, 1_800L,
                     "sol2sanger", "filtered chunk", "Sanger FASTQ", Map.of("chunk_id", id)));
-            jobs.add(new JobDefinition("fastq2bfq-" + id, "fastq2bfq " + id, List.of("sol2sanger-" + id), TaskType.FASTQ_TO_BFQ, 12_000L,
+            jobs.add(new JobDefinition("fastq2bfq-" + id, "fastq2bfq " + id, List.of("sol2sanger-" + id), TaskType.FASTQ_TO_BFQ, 1_800L,
                     "fastq2bfq", "Sanger FASTQ", "BFQ-like chunk", Map.of("chunk_id", id)));
-            jobs.add(new JobDefinition("map-" + id, "map " + id, List.of("fastq2bfq-" + id), TaskType.MAP, 28_000L,
+            jobs.add(new JobDefinition("map-" + id, "map " + id, List.of("fastq2bfq-" + id), TaskType.MAP, 4_200L,
                     "map", "BFQ-like chunk", "alignments", Map.of("chunk_id", id)));
         }
-        jobs.add(new JobDefinition("mapMerge", "mapMerge", rangeDependencies("map-", splitCount), TaskType.MAP_MERGE, 20_000L,
+        jobs.add(new JobDefinition("mapMerge", "mapMerge", rangeDependencies("map-", splitCount), TaskType.MAP_MERGE, 3_000L,
                 "mapMerge", "mapped chunks", "merged alignments", Map.of()));
-        jobs.add(new JobDefinition("maqIndex", "maqIndex", List.of("mapMerge"), TaskType.MAQ_INDEX, 15_000L,
+        jobs.add(new JobDefinition("maqIndex", "maqIndex", List.of("mapMerge"), TaskType.MAQ_INDEX, 2_250L,
                 "maqIndex", "merged alignments", "alignment index", Map.of()));
-        jobs.add(new JobDefinition("pileup", "pileup", List.of("mapMerge", "maqIndex"), TaskType.PILEUP, 18_000L,
+        jobs.add(new JobDefinition("pileup", "pileup", List.of("mapMerge", "maqIndex"), TaskType.PILEUP, 2_700L,
                 "pileup", "merged alignments + index", "pileup summary", Map.of()));
         return new WorkflowDefinition("epigenomics", "Epigenomics", jobs);
     }

@@ -29,8 +29,8 @@ public final class DataGenerator {
         writeFasta(dataRoot.resolve("query.fasta"), queryCount, sequenceLength, motifs, true);
         writeFasta(dataRoot.resolve("reference-a.fasta"), referenceRecordsPerShard, sequenceLength, motifs, false);
         writeFasta(dataRoot.resolve("reference-b.fasta"), referenceRecordsPerShard, sequenceLength, motifs, false);
-        int trainingQueries = Math.max(8, (queryCount * trainingFractionPercent) / 100);
-        int trainingRefs = Math.max(256, (referenceRecordsPerShard * trainingFractionPercent) / 100);
+        int trainingQueries = Math.min(queryCount, Math.max(24, (queryCount * trainingFractionPercent) / 100));
+        int trainingRefs = Math.min(referenceRecordsPerShard, Math.max(1_024, (referenceRecordsPerShard * trainingFractionPercent) / 100));
         copySubset(dataRoot.resolve("query.fasta"), dataRoot.resolve("training/query-sample.fasta"), trainingQueries);
         copySubset(dataRoot.resolve("reference-a.fasta"), dataRoot.resolve("training/reference-a-sample.fasta"), trainingRefs);
         copySubset(dataRoot.resolve("reference-b.fasta"), dataRoot.resolve("training/reference-b-sample.fasta"), trainingRefs);

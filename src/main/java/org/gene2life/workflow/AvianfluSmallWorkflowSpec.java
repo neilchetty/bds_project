@@ -126,18 +126,18 @@ public final class AvianfluSmallWorkflowSpec implements WorkflowSpec {
 
     private static WorkflowDefinition buildDefinition(int dockingTasks) {
         List<JobDefinition> jobs = new ArrayList<>();
-        jobs.add(new JobDefinition("prepare-receptor", "Prepare Receptor", List.of(), TaskType.PREPARE_RECEPTOR, 18_000L,
+        jobs.add(new JobDefinition("prepare-receptor", "Prepare Receptor", List.of(), TaskType.PREPARE_RECEPTOR, 1_800L,
                 "prepare-receptor", "receptor model", "prepared receptor", Map.of()));
-        jobs.add(new JobDefinition("prepare-gpf", "PrepareGPF", List.of("prepare-receptor"), TaskType.PREPARE_GPF, 16_000L,
+        jobs.add(new JobDefinition("prepare-gpf", "PrepareGPF", List.of("prepare-receptor"), TaskType.PREPARE_GPF, 1_600L,
                 "prepare-gpf", "receptor + grid template", "grid parameters", Map.of()));
-        jobs.add(new JobDefinition("prepare-dpf", "PrepareDPF", List.of(), TaskType.PREPARE_DPF, 14_000L,
+        jobs.add(new JobDefinition("prepare-dpf", "PrepareDPF", List.of(), TaskType.PREPARE_DPF, 1_400L,
                 "prepare-dpf", "ligand library", "docking parameters", Map.of()));
-        jobs.add(new JobDefinition("auto-grid", "AutoGrid", List.of("prepare-gpf"), TaskType.AUTOGRID, 24_000L,
+        jobs.add(new JobDefinition("auto-grid", "AutoGrid", List.of("prepare-gpf"), TaskType.AUTOGRID, 2_400L,
                 "auto-grid", "grid parameters", "autogrid cells", Map.of()));
         for (int i = 1; i <= dockingTasks; i++) {
             String ligandId = pad(i);
             jobs.add(new JobDefinition("autodock-" + ligandId, "Autodock " + ligandId, List.of("auto-grid", "prepare-dpf"),
-                    TaskType.AUTODOCK, 28_000L, "autodock", "grid + docking parameters + ligand", "docking result",
+                    TaskType.AUTODOCK, 2_800L, "autodock", "grid + docking parameters + ligand", "docking result",
                     Map.of("ligand_id", ligandId)));
         }
         return new WorkflowDefinition("avianflu_small", "Avianflu_small", jobs);
