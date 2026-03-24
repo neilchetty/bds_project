@@ -51,6 +51,14 @@ EOF
     <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
     <value>false</value>
   </property>
+  <property>
+    <name>dfs.namenode.safemode.extension</name>
+    <value>0</value>
+  </property>
+  <property>
+    <name>dfs.namenode.safemode.min.datanodes</name>
+    <value>0</value>
+  </property>
 </configuration>
 EOF
 

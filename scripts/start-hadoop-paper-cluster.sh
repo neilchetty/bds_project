@@ -48,6 +48,21 @@ if [[ "$ready_yarn" != "true" ]]; then
   exit 1
 fi
 
+ready_safemode=false
+for _ in $(seq 1 60); do
+  safemode_state="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfsadmin -safemode get 2>/dev/null | tail -1" | tr -d '\r')"
+  if [[ "$safemode_state" == *"OFF"* ]]; then
+    ready_safemode=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$ready_safemode" != "true" ]]; then
+  echo "HDFS did not leave safe mode for cluster under $OUTPUT_DIR" >&2
+  docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfsadmin -safemode get || true" >&2 || true
+  exit 1
+fi
+
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -mkdir -p /gene2life /gene2life/data /gene2life/work /user/${client_user} /user/${client_user}/.staging >/dev/null 2>&1 || true"
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chmod 1777 /gene2life /gene2life/data /gene2life/work >/dev/null 2>&1 || true"
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chmod 700 /user/${client_user} >/dev/null 2>&1 || true"
