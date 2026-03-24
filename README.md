@@ -18,10 +18,11 @@ The implementation keeps the paper's job names and dependencies, but runs real f
 ## Project Layout
 
 - `src/main/java`: application source.
-- `config/clusters-paper.csv`: four-cluster profile matching the paper's relative heterogeneity.
+- `config/clusters-paper.csv`: four-cluster profile matching the paper's Table 5 virtual-machine capacities.
 - `config/clusters-server.csv`: a server-oriented default profile for your Ubuntu host.
 - `config/clusters-z4-g5.csv`: tuned profile for the reported Ubuntu Z4 G5 workstation.
-- `config/clusters-z4-g5-paper-sweep.csv`: tuned 12-node profile for paper-style node-count sweeps on the Ubuntu host.
+- `config/clusters-z4-g5-paper-sweep.csv`: exact paper-style 12-node profile pinned onto the Ubuntu host.
+- `config/clusters-z4-g5-paper-sweep-scaled.csv`: scaled-up 12-node profile when you want stronger logical nodes on the same host.
 - `scripts/build.sh`: compile with plain `javac`.
 - `scripts/run.sh`: run the CLI.
 - `scripts/build-image.sh`: build the Docker image used for isolated logical-node execution.
@@ -72,7 +73,9 @@ Run both:
 ./scripts/run.sh compare \
   --workspace work/demo \
   --data-root work/demo/data \
-  --cluster-config config/clusters-server.csv
+  --cluster-config config/clusters-server.csv \
+  --training-warmup-runs 1 \
+  --training-measure-runs 3
 ```
 
 ## Big-Data Positioning
@@ -136,7 +139,7 @@ chmod +x ./scripts/generate-cluster-config.sh
 
 Detailed server guidance is in `docs/server-tuning.md`.
 
-For a fairer comparison on one physical server, `compare` now alternates scheduler order across rounds instead of always running WSH first and HEFT second. This reduces JIT and filesystem-cache bias.
+For a fairer comparison on one physical server, `compare` alternates scheduler order across rounds instead of always running WSH first and HEFT second. This reduces JIT and filesystem-cache bias. WSH training also uses repeated measurements per cluster and job so one noisy sample does not reshuffle the cluster order.
 
 Docker isolation is now built into the execution path: each WSH training job and each scheduled workflow job can run in a constrained container representing the assigned logical node.
 In Docker mode, each logical node is now a persistent named container for the lifetime of one scheduler run, and jobs execute inside it with `docker exec`.
@@ -149,6 +152,8 @@ for nodes in 4 7 10 12; do
   CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
   MAX_NODES="$nodes" \
   COMPARE_ROUNDS=4 \
+  TRAINING_WARMUP_RUNS=1 \
+  TRAINING_MEASURE_RUNS=3 \
   EXECUTOR=docker \
   ./scripts/server-benchmark.sh
 done
@@ -179,6 +184,7 @@ The server benchmark script uses this image to execute node-isolated jobs automa
 - Workflow structure comes directly from Fig. 2 in the paper.
 - Communication cost is ignored during ranking and allocation, matching the paper.
 - WSH uses training runs on the first node of each cluster before building the plan.
+- Reported `SLR` now uses a scheduler-independent modeled critical-path lower bound instead of the realized durations from the same run.
 - When job runtimes across clusters are nearly equal, the implementation classifies the job as more IO-intensive and breaks ties toward the lower-powered cluster, matching the paper's stated policy.
 - Detailed paper-to-code mapping is documented in `docs/paper-mapping.md`.
 

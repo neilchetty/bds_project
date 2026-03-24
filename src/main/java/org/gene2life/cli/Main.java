@@ -15,6 +15,8 @@ import org.gene2life.model.NodeProfile;
 import org.gene2life.model.PlanAssignment;
 import org.gene2life.model.WorkflowDefinition;
 import org.gene2life.report.ReportWriter;
+import org.gene2life.report.WorkflowMetrics;
+import org.gene2life.report.WorkflowMetrics.RunMetrics;
 import org.gene2life.scheduler.HeftScheduler;
 import org.gene2life.scheduler.Scheduler;
 import org.gene2life.scheduler.TrainingBenchmarks;
@@ -26,7 +28,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -67,7 +68,9 @@ public final class Main {
                 cli.option("scheduler", "wsh"),
                 cli.optionInt("max-nodes", 0),
                 ExecutionMode.fromCliValue(cli.option("executor", "local")),
-                cli.option("docker-image", "gene2life-java:latest"));
+                cli.option("docker-image", "gene2life-java:latest"),
+                cli.optionInt("training-warmup-runs", 1),
+                cli.optionInt("training-measure-runs", 3));
     }
 
     private static RunOutcome runSchedulerInternal(
@@ -77,7 +80,9 @@ public final class Main {
             String schedulerName,
             int maxNodes,
             ExecutionMode executionMode,
-            String dockerImage) throws Exception {
+            String dockerImage,
+            int trainingWarmupRuns,
+            int trainingMeasureRuns) throws Exception {
         WorkflowDefinition workflow = WorkflowDefinition.gene2life();
         Map<org.gene2life.model.JobId, TaskExecutor> executors = Gene2LifeTaskExecutors.executors();
         List<ClusterProfile> clusters = ClusterProfiles.limitRoundRobin(ClusterConfigLoader.load(clusterConfig), maxNodes);
@@ -89,7 +94,8 @@ public final class Main {
         TrainingBenchmarks benchmarks;
         try {
             benchmarks = schedulerName.equalsIgnoreCase("wsh")
-                    ? new TrainingRunner(executors, executionMode, dockerNodePool).benchmark(dataRoot, clusters)
+                    ? new TrainingRunner(executors, executionMode, dockerNodePool, trainingWarmupRuns, trainingMeasureRuns)
+                    .benchmark(dataRoot, clusters)
                     : TrainingBenchmarks.empty();
         } catch (Exception exception) {
             if (dockerNodePool != null) {
@@ -121,21 +127,32 @@ public final class Main {
         int maxNodes = cli.optionInt("max-nodes", 0);
         ExecutionMode executionMode = ExecutionMode.fromCliValue(cli.option("executor", "local"));
         String dockerImage = cli.option("docker-image", "gene2life-java:latest");
+        int trainingWarmupRuns = cli.optionInt("training-warmup-runs", 1);
+        int trainingMeasureRuns = cli.optionInt("training-measure-runs", 3);
+        List<ClusterProfile> clusters = ClusterProfiles.limitRoundRobin(ClusterConfigLoader.load(clusterConfig), maxNodes);
         List<RoundOutcome> roundOutcomes = new ArrayList<>();
         for (int round = 1; round <= rounds; round++) {
             boolean wshFirst = round % 2 == 1;
             Path roundWorkspace = workspace.resolve(String.format("round-%02d", round));
             if (wshFirst) {
-                RunOutcome wsh = runSchedulerInternal(roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage);
-                RunOutcome heft = runSchedulerInternal(roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage);
+                RunOutcome wsh = runSchedulerInternal(
+                        roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
+                        trainingWarmupRuns, trainingMeasureRuns);
+                RunOutcome heft = runSchedulerInternal(
+                        roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
+                        trainingWarmupRuns, trainingMeasureRuns);
                 roundOutcomes.add(new RoundOutcome(round, "WSH->HEFT", wsh, heft));
             } else {
-                RunOutcome heft = runSchedulerInternal(roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage);
-                RunOutcome wsh = runSchedulerInternal(roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage);
+                RunOutcome heft = runSchedulerInternal(
+                        roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
+                        trainingWarmupRuns, trainingMeasureRuns);
+                RunOutcome wsh = runSchedulerInternal(
+                        roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
+                        trainingWarmupRuns, trainingMeasureRuns);
                 roundOutcomes.add(new RoundOutcome(round, "HEFT->WSH", wsh, heft));
             }
         }
-        writeComparisonReport(workspace.resolve("comparison.md"), WorkflowDefinition.gene2life(), roundOutcomes);
+        writeComparisonReport(workspace.resolve("comparison.md"), WorkflowDefinition.gene2life(), clusters, roundOutcomes);
         System.out.println("Comparison runs completed under " + workspace.toAbsolutePath());
     }
 
@@ -165,75 +182,38 @@ public final class Main {
         };
     }
 
-    private static void writeComparisonReport(Path output, WorkflowDefinition workflow, List<RoundOutcome> rounds) throws Exception {
-        List<Metrics> wshMetrics = rounds.stream().map(round -> metrics(workflow, round.wsh.runs)).toList();
-        List<Metrics> heftMetrics = rounds.stream().map(round -> metrics(workflow, round.heft.runs)).toList();
-        Metrics wshAverage = averageMetrics(wshMetrics);
-        Metrics heftAverage = averageMetrics(heftMetrics);
-        double makespanImprovement = percentageImprovement(heftAverage.makespanMillis, wshAverage.makespanMillis);
+    private static void writeComparisonReport(
+            Path output,
+            WorkflowDefinition workflow,
+            List<ClusterProfile> clusters,
+            List<RoundOutcome> rounds) throws Exception {
+        List<RunMetrics> wshMetrics = rounds.stream().map(round -> WorkflowMetrics.summarize(workflow, clusters, round.wsh.runs)).toList();
+        List<RunMetrics> heftMetrics = rounds.stream().map(round -> WorkflowMetrics.summarize(workflow, clusters, round.heft.runs)).toList();
+        RunMetrics wshAverage = averageMetrics(wshMetrics);
+        RunMetrics heftAverage = averageMetrics(heftMetrics);
+        double makespanImprovement = percentageImprovement(heftAverage.makespanMillis(), wshAverage.makespanMillis());
         StringBuilder body = new StringBuilder();
         body.append("# Scheduler Comparison\n\n");
         body.append("## Aggregate\n\n");
         body.append("- Rounds: ").append(rounds.size()).append('\n');
-        body.append("- WSH average makespan: ").append(wshAverage.makespanMillis).append(" ms\n");
-        body.append("- HEFT average makespan: ").append(heftAverage.makespanMillis).append(" ms\n");
-        body.append("- WSH average speedup: ").append(String.format("%.4f", wshAverage.speedup)).append('\n');
-        body.append("- HEFT average speedup: ").append(String.format("%.4f", heftAverage.speedup)).append('\n');
-        body.append("- WSH average scheduling length ratio: ").append(String.format("%.4f", wshAverage.slr)).append('\n');
-        body.append("- HEFT average scheduling length ratio: ").append(String.format("%.4f", heftAverage.slr)).append('\n');
+        body.append("- WSH average makespan: ").append(wshAverage.makespanMillis()).append(" ms\n");
+        body.append("- HEFT average makespan: ").append(heftAverage.makespanMillis()).append(" ms\n");
+        body.append("- WSH average speedup: ").append(String.format("%.4f", wshAverage.speedup())).append('\n');
+        body.append("- HEFT average speedup: ").append(String.format("%.4f", heftAverage.speedup())).append('\n');
+        body.append("- WSH average scheduling length ratio: ").append(String.format("%.4f", wshAverage.slr())).append('\n');
+        body.append("- HEFT average scheduling length ratio: ").append(String.format("%.4f", heftAverage.slr())).append('\n');
         body.append("- WSH makespan improvement over HEFT: ").append(String.format("%.2f%%", makespanImprovement)).append("\n\n");
         body.append("## Rounds\n\n");
         for (RoundOutcome round : rounds) {
-            Metrics wsh = metrics(workflow, round.wsh.runs);
-            Metrics heft = metrics(workflow, round.heft.runs);
+            RunMetrics wsh = WorkflowMetrics.summarize(workflow, clusters, round.wsh.runs);
+            RunMetrics heft = WorkflowMetrics.summarize(workflow, clusters, round.heft.runs);
             body.append("### Round ").append(round.roundNumber).append(" (").append(round.order).append(")\n\n");
-            body.append("- WSH makespan: ").append(wsh.makespanMillis).append(" ms\n");
+            body.append("- WSH makespan: ").append(wsh.makespanMillis()).append(" ms\n");
             body.append("- WSH run directory: ").append(round.wsh.runRoot.toAbsolutePath()).append('\n');
-            body.append("- HEFT makespan: ").append(heft.makespanMillis).append(" ms\n");
+            body.append("- HEFT makespan: ").append(heft.makespanMillis()).append(" ms\n");
             body.append("- HEFT run directory: ").append(round.heft.runRoot.toAbsolutePath()).append("\n\n");
         }
         Files.writeString(output, body, StandardCharsets.UTF_8);
-    }
-
-    private static Metrics metrics(WorkflowDefinition workflow, List<JobRun> runs) {
-        long makespan = runs.stream().mapToLong(JobRun::actualFinishMillis).max().orElse(0L)
-                - runs.stream().mapToLong(JobRun::actualStartMillis).min().orElse(0L);
-        long sequential = runs.stream().mapToLong(JobRun::durationMillis).sum();
-        Map<JobId, Long> durations = new java.util.EnumMap<>(JobId.class);
-        for (JobRun run : runs) {
-            durations.put(run.jobId(), run.durationMillis());
-        }
-        long criticalPath = criticalPath(workflow, durations);
-        double speedup = makespan == 0 ? 0.0 : (double) sequential / makespan;
-        double slr = criticalPath == 0 ? 0.0 : Math.max(1.0, (double) makespan / criticalPath);
-        return new Metrics(makespan, speedup, slr);
-    }
-
-    private static long criticalPath(WorkflowDefinition workflow, Map<JobId, Long> durations) {
-        Map<JobId, Long> cache = new java.util.EnumMap<>(JobId.class);
-        long max = 0L;
-        for (var job : workflow.jobs()) {
-            max = Math.max(max, criticalPath(job.id(), workflow, durations, cache));
-        }
-        return max;
-    }
-
-    private static long criticalPath(
-            JobId jobId,
-            WorkflowDefinition workflow,
-            Map<JobId, Long> durations,
-            Map<JobId, Long> cache) {
-        if (cache.containsKey(jobId)) {
-            return cache.get(jobId);
-        }
-        long own = durations.getOrDefault(jobId, 0L);
-        long successor = workflow.successors(jobId).stream()
-                .mapToLong(job -> criticalPath(job.id(), workflow, durations, cache))
-                .max()
-                .orElse(0L);
-        long value = own + successor;
-        cache.put(jobId, value);
-        return value;
     }
 
     private static double percentageImprovement(long baseline, long candidate) {
@@ -256,11 +236,13 @@ public final class Main {
         return candidate;
     }
 
-    private static Metrics averageMetrics(List<Metrics> values) {
-        double makespan = values.stream().mapToLong(Metrics::makespanMillis).average().orElse(0.0);
-        double speedup = values.stream().mapToDouble(Metrics::speedup).average().orElse(0.0);
-        double slr = values.stream().mapToDouble(Metrics::slr).average().orElse(0.0);
-        return new Metrics(Math.round(makespan), speedup, slr);
+    private static RunMetrics averageMetrics(List<RunMetrics> values) {
+        double makespan = values.stream().mapToLong(RunMetrics::makespanMillis).average().orElse(0.0);
+        double sequential = values.stream().mapToLong(RunMetrics::sequentialRuntimeMillis).average().orElse(0.0);
+        double criticalPath = values.stream().mapToLong(RunMetrics::criticalPathLowerBoundMillis).average().orElse(0.0);
+        double speedup = values.stream().mapToDouble(RunMetrics::speedup).average().orElse(0.0);
+        double slr = values.stream().mapToDouble(RunMetrics::slr).average().orElse(0.0);
+        return new RunMetrics(Math.round(makespan), Math.round(sequential), Math.round(criticalPath), speedup, slr);
     }
 
     private record RunOutcome(String schedulerName, Path runRoot, List<JobRun> runs) {
@@ -269,6 +251,4 @@ public final class Main {
     private record RoundOutcome(int roundNumber, String order, RunOutcome wsh, RunOutcome heft) {
     }
 
-    private record Metrics(long makespanMillis, double speedup, double slr) {
-    }
 }

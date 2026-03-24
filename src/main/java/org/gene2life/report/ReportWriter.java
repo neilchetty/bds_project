@@ -6,6 +6,7 @@ import org.gene2life.model.JobRun;
 import org.gene2life.model.PlanAssignment;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.WorkflowDefinition;
+import org.gene2life.report.WorkflowMetrics.RunMetrics;
 import org.gene2life.scheduler.TrainingBenchmarks;
 
 import java.io.BufferedWriter;
@@ -13,9 +14,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 
 public final class ReportWriter {
     public void writeRunReport(
@@ -29,7 +28,8 @@ public final class ReportWriter {
         Files.createDirectories(runRoot);
         writePlanCsv(runRoot.resolve("schedule-plan.csv"), plan);
         writeRunsCsv(runRoot.resolve("run-metrics.csv"), runs);
-        writeSummaryMarkdown(runRoot.resolve("README.md"), workflow, clusters, schedulerName, benchmarks, plan, runs);
+        RunMetrics metrics = WorkflowMetrics.summarize(workflow, clusters, runs);
+        writeSummaryMarkdown(runRoot.resolve("README.md"), workflow, clusters, schedulerName, benchmarks, plan, runs, metrics);
     }
 
     private void writePlanCsv(Path output, List<PlanAssignment> plan) throws IOException {
@@ -77,17 +77,8 @@ public final class ReportWriter {
             String schedulerName,
             TrainingBenchmarks benchmarks,
             List<PlanAssignment> plan,
-            List<JobRun> runs) throws IOException {
-        long makespan = runs.stream().mapToLong(JobRun::actualFinishMillis).max().orElse(0L)
-                - runs.stream().mapToLong(JobRun::actualStartMillis).min().orElse(0L);
-        long sequential = runs.stream().mapToLong(JobRun::durationMillis).sum();
-        Map<JobId, Long> actualDurations = new EnumMap<>(JobId.class);
-        for (JobRun run : runs) {
-            actualDurations.put(run.jobId(), run.durationMillis());
-        }
-        long criticalPath = criticalPath(workflow, actualDurations);
-        double speedup = makespan == 0 ? 0.0 : (double) sequential / makespan;
-        double slr = criticalPath == 0 ? 0.0 : Math.max(1.0, (double) makespan / criticalPath);
+            List<JobRun> runs,
+            RunMetrics metrics) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8)) {
             writer.write("# " + schedulerName + " Gene2Life Run");
             writer.newLine();
@@ -98,20 +89,27 @@ public final class ReportWriter {
             writer.write("## Metrics");
             writer.newLine();
             writer.newLine();
-            writer.write("- Makespan: " + makespan + " ms");
+            writer.write("- Makespan: " + metrics.makespanMillis() + " ms");
             writer.newLine();
-            writer.write("- Sequential runtime sum: " + sequential + " ms");
+            writer.write("- Sequential runtime sum: " + metrics.sequentialRuntimeMillis() + " ms");
             writer.newLine();
-            writer.write("- Critical-path lower bound: " + criticalPath + " ms");
+            writer.write("- Modeled critical-path lower bound: " + metrics.criticalPathLowerBoundMillis() + " ms");
             writer.newLine();
-            writer.write("- Speedup: " + String.format("%.4f", speedup));
+            writer.write("- Speedup: " + String.format("%.4f", metrics.speedup()));
             writer.newLine();
-            writer.write("- Scheduling length ratio: " + String.format("%.4f", slr));
+            writer.write("- Scheduling length ratio: " + String.format("%.4f", metrics.slr()));
             writer.newLine();
             writer.newLine();
             writer.write("## Training Benchmarks");
             writer.newLine();
             writer.newLine();
+            if (benchmarks.hasMeasurements(JobId.BLAST1)) {
+                writer.write("- Warmup runs per cluster/job: " + benchmarks.warmupRuns());
+                writer.newLine();
+                writer.write("- Measured runs per cluster/job: " + benchmarks.measurementRuns());
+                writer.newLine();
+                writer.newLine();
+            }
             for (JobDefinition job : workflow.jobs()) {
                 writer.write("- " + job.id().cliName() + ": ");
                 writer.write(plan.stream().filter(item -> item.jobId() == job.id()).findFirst().map(PlanAssignment::classification).orElse("compute"));
@@ -128,32 +126,5 @@ public final class ReportWriter {
                 writer.newLine();
             }
         }
-    }
-
-    private long criticalPath(WorkflowDefinition workflow, Map<JobId, Long> durations) {
-        Map<JobId, Long> cache = new EnumMap<>(JobId.class);
-        long max = 0L;
-        for (JobDefinition job : workflow.jobs()) {
-            max = Math.max(max, criticalPath(job.id(), workflow, durations, cache));
-        }
-        return max;
-    }
-
-    private long criticalPath(
-            JobId jobId,
-            WorkflowDefinition workflow,
-            Map<JobId, Long> durations,
-            Map<JobId, Long> cache) {
-        if (cache.containsKey(jobId)) {
-            return cache.get(jobId);
-        }
-        long own = durations.getOrDefault(jobId, 0L);
-        long successor = workflow.successors(jobId).stream()
-                .mapToLong(job -> criticalPath(job.id(), workflow, durations, cache))
-                .max()
-                .orElse(0L);
-        long value = own + successor;
-        cache.put(jobId, value);
-        return value;
     }
 }

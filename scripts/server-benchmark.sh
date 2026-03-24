@@ -11,6 +11,8 @@ COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
 MAX_NODES="${MAX_NODES:-0}"
 EXECUTOR="${EXECUTOR:-docker}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
+TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
+TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
 
 case "$PROFILE" in
   small)
@@ -56,6 +58,8 @@ fi
   --cluster-config "$CLUSTER_CONFIG" \
   --rounds "$COMPARE_ROUNDS" \
   --max-nodes "$MAX_NODES" \
+  --training-warmup-runs "$TRAINING_WARMUP_RUNS" \
+  --training-measure-runs "$TRAINING_MEASURE_RUNS" \
   --executor "$EXECUTOR" \
   --docker-image "$DOCKER_IMAGE"
 
@@ -66,6 +70,8 @@ echo "Java options:"
 echo "  $GENE2LIFE_JAVA_OPTS"
 echo "Comparison rounds:"
 echo "  $COMPARE_ROUNDS"
+echo "WSH training runs:"
+echo "  warmup=$TRAINING_WARMUP_RUNS measure=$TRAINING_MEASURE_RUNS"
 echo "Executor:"
 echo "  $EXECUTOR"
 if [[ "$EXECUTOR" == "docker" ]]; then

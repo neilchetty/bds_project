@@ -10,10 +10,18 @@ import java.util.Map;
 public final class TrainingBenchmarks {
     private final Map<JobId, Map<String, Long>> durationsByJobAndCluster;
     private final Map<JobId, String> classifications;
+    private final int warmupRuns;
+    private final int measurementRuns;
 
-    public TrainingBenchmarks(Map<JobId, Map<String, Long>> durationsByJobAndCluster, Map<JobId, String> classifications) {
+    public TrainingBenchmarks(
+            Map<JobId, Map<String, Long>> durationsByJobAndCluster,
+            Map<JobId, String> classifications,
+            int warmupRuns,
+            int measurementRuns) {
         this.durationsByJobAndCluster = durationsByJobAndCluster;
         this.classifications = classifications;
+        this.warmupRuns = warmupRuns;
+        this.measurementRuns = measurementRuns;
     }
 
     public long duration(JobId jobId, String clusterId) {
@@ -30,6 +38,14 @@ public final class TrainingBenchmarks {
 
     public boolean hasMeasurements(JobId jobId) {
         return durationsByJobAndCluster.containsKey(jobId) && !durationsByJobAndCluster.get(jobId).isEmpty();
+    }
+
+    public int warmupRuns() {
+        return warmupRuns;
+    }
+
+    public int measurementRuns() {
+        return measurementRuns;
     }
 
     public List<String> sortedClusters(JobId jobId, List<ClusterProfile> clusters) {
@@ -57,6 +73,6 @@ public final class TrainingBenchmarks {
     }
 
     public static TrainingBenchmarks empty() {
-        return new TrainingBenchmarks(new EnumMap<>(JobId.class), new EnumMap<>(JobId.class));
+        return new TrainingBenchmarks(new EnumMap<>(JobId.class), new EnumMap<>(JobId.class), 0, 0);
     }
 }

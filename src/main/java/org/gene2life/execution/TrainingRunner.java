@@ -10,6 +10,8 @@ import org.gene2life.task.TaskResult;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
@@ -19,11 +21,20 @@ public final class TrainingRunner {
     private final Map<JobId, TaskExecutor> executors;
     private final ExecutionMode executionMode;
     private final DockerNodePool dockerNodePool;
+    private final int warmupRuns;
+    private final int measurementRuns;
 
-    public TrainingRunner(Map<JobId, TaskExecutor> executors, ExecutionMode executionMode, DockerNodePool dockerNodePool) {
+    public TrainingRunner(
+            Map<JobId, TaskExecutor> executors,
+            ExecutionMode executionMode,
+            DockerNodePool dockerNodePool,
+            int warmupRuns,
+            int measurementRuns) {
         this.executors = executors;
         this.executionMode = executionMode;
         this.dockerNodePool = dockerNodePool;
+        this.warmupRuns = Math.max(0, warmupRuns);
+        this.measurementRuns = Math.max(1, measurementRuns);
     }
 
     public TrainingBenchmarks benchmark(Path dataRoot, List<ClusterProfile> clusters) throws Exception {
@@ -39,12 +50,18 @@ public final class TrainingRunner {
                         WorkflowExecutor.trainingPrimaryInput(dataRoot, jobId),
                         WorkflowExecutor.trainingSecondaryInput(dataRoot, jobId),
                         outputDir);
-                long start = System.currentTimeMillis();
-                TaskResult result = executionMode == ExecutionMode.DOCKER
-                        ? dockerNodePool.execute(node, jobId, inputs)
-                        : executors.get(jobId).execute(inputs, node);
-                long finish = System.currentTimeMillis();
-                durations.computeIfAbsent(jobId, ignored -> new HashMap<>()).put(cluster.clusterId(), Math.max(1L, finish - start));
+                for (int warmup = 0; warmup < warmupRuns; warmup++) {
+                    executeTrainingSample(jobId, node, inputs);
+                }
+                List<Long> measuredDurations = new ArrayList<>();
+                TaskResult result = null;
+                for (int sample = 0; sample < measurementRuns; sample++) {
+                    long start = System.currentTimeMillis();
+                    result = executeTrainingSample(jobId, node, inputs);
+                    long finish = System.currentTimeMillis();
+                    measuredDurations.add(Math.max(1L, finish - start));
+                }
+                durations.computeIfAbsent(jobId, ignored -> new HashMap<>()).put(cluster.clusterId(), median(measuredDurations));
                 mirrorTrainingOutput(jobId, result.outputPath(), dataRoot);
             }
         }
@@ -54,7 +71,23 @@ public final class TrainingRunner {
             long max = values.get(values.size() - 1);
             classifications.put(jobId, max <= Math.max(1L, (long) (min * 1.12)) ? "io" : "compute");
         }
-        return new TrainingBenchmarks(durations, classifications);
+        return new TrainingBenchmarks(durations, classifications, warmupRuns, measurementRuns);
+    }
+
+    private TaskResult executeTrainingSample(JobId jobId, NodeProfile node, TaskInputs inputs) throws Exception {
+        return executionMode == ExecutionMode.DOCKER
+                ? dockerNodePool.execute(node, jobId, inputs)
+                : executors.get(jobId).execute(inputs, node);
+    }
+
+    private long median(List<Long> values) {
+        List<Long> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        int middle = sorted.size() / 2;
+        if (sorted.size() % 2 == 1) {
+            return sorted.get(middle);
+        }
+        return Math.round((sorted.get(middle - 1) + sorted.get(middle)) / 2.0);
     }
 
     private void mirrorTrainingOutput(JobId jobId, Path source, Path dataRoot) throws Exception {

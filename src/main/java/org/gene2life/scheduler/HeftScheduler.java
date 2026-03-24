@@ -91,21 +91,7 @@ public final class HeftScheduler implements Scheduler {
     }
 
     private long estimatedDuration(JobId jobId, NodeProfile node) {
-        double base = switch (jobId) {
-            case BLAST1, BLAST2 -> 62_000.0;
-            case CLUSTALW1, CLUSTALW2 -> 90_000.0;
-            case DNAPARS -> 19_000.0;
-            case PROTPARS -> 16_000.0;
-            case DRAWGRAM1, DRAWGRAM2 -> 18_000.0;
-        };
-        double cpuFactor = Math.max(1.0, node.cpuThreads());
-        double ioFactor = Math.max(1.0, node.ioBufferKb() / 256.0);
-        double estimate = switch (jobId) {
-            case BLAST1, BLAST2, CLUSTALW1, CLUSTALW2 -> base / cpuFactor;
-            case DNAPARS, PROTPARS -> base / ((cpuFactor * 0.6) + (ioFactor * 0.4));
-            case DRAWGRAM1, DRAWGRAM2 -> base / ioFactor;
-        };
-        return Math.max(1L, Math.round(estimate));
+        return DurationModel.estimateDuration(jobId, node);
     }
 
     private String staticClassification(JobId jobId) {
