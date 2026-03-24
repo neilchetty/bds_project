@@ -152,6 +152,9 @@ public final class HadoopSupport {
         if (executionConfig.fsDefaultFs() != null && !executionConfig.fsDefaultFs().isBlank()) {
             configuration.set("fs.defaultFS", executionConfig.fsDefaultFs());
         }
+        configuration.setIfUnset("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem");
+        configuration.setIfUnset("fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem");
+        configuration.setIfUnset("fs.AbstractFileSystem.hdfs.impl", "org.apache.hadoop.fs.Hdfs");
         if (executionConfig.frameworkName() != null && !executionConfig.frameworkName().isBlank()) {
             configuration.set("mapreduce.framework.name", executionConfig.frameworkName());
         }
