@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl procps netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL "https://archive.apache.org/dist/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" -o /tmp/hadoop.tgz \
+RUN curl -fL "https://downloads.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" -o /tmp/hadoop.tgz \
     && tar -xzf /tmp/hadoop.tgz -C /opt \
     && ln -s "/opt/hadoop-${HADOOP_VERSION}" /opt/hadoop \
     && rm -f /tmp/hadoop.tgz
