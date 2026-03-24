@@ -11,7 +11,7 @@
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <hadoop.version>3.3.6</hadoop.version>
+    <hadoop.version>3.4.3</hadoop.version>
   </properties>
 
   <dependencies>
