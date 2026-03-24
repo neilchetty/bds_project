@@ -10,13 +10,19 @@ CLUSTER_CONFIG="${CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.cs
 COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
-EXECUTOR="${EXECUTOR:-docker}"
+EXECUTOR="${EXECUTOR:-hadoop}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
 GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication}"
 BASE_WORK_DIR="${BASE_WORK_DIR:-$ROOT_DIR/work/paper-sweeps}"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/work/paper-sweep-logs}"
 DATASET_BASE_DIR="${DATASET_BASE_DIR:-$BASE_WORK_DIR/datasets}"
 REUSE_DATA="${REUSE_DATA:-true}"
+HDFS_DATASET_BASE_DIR="${HDFS_DATASET_BASE_DIR:-/gene2life/data}"
+HDFS_BASE_WORK_ROOT="${HDFS_BASE_WORK_ROOT:-/gene2life/work}"
+HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${HADOOP_HOME:-}/etc/hadoop}"
+HADOOP_FS_DEFAULT="${HADOOP_FS_DEFAULT:-}"
+HADOOP_FRAMEWORK_NAME="${HADOOP_FRAMEWORK_NAME:-yarn}"
+HADOOP_YARN_RM="${HADOOP_YARN_RM:-}"
 
 mkdir -p "$BASE_WORK_DIR" "$LOG_DIR" "$DATASET_BASE_DIR"
 
@@ -34,9 +40,15 @@ run_with_timestamped_log() {
   local logfile="$1"
   shift
   set +e
-  "$@" 2>&1 | while IFS= read -r line; do
-    printf '[%s] %s\n' "$(timestamp)" "$line"
-  done | tee -a "$logfile" | tee -a "$MASTER_LOG"
+  if [[ "$logfile" == "$MASTER_LOG" ]]; then
+    "$@" 2>&1 | while IFS= read -r line; do
+      printf '[%s] %s\n' "$(timestamp)" "$line"
+    done | tee -a "$MASTER_LOG"
+  else
+    "$@" 2>&1 | while IFS= read -r line; do
+      printf '[%s] %s\n' "$(timestamp)" "$line"
+    done | tee -a "$logfile" | tee -a "$MASTER_LOG"
+  fi
   local statuses=("${PIPESTATUS[@]}")
   set -e
   return "${statuses[0]}"
@@ -50,6 +62,11 @@ log "CLUSTER_CONFIG=$CLUSTER_CONFIG"
 log "EXECUTOR=$EXECUTOR"
 log "COMPARE_ROUNDS=$COMPARE_ROUNDS"
 log "REUSE_DATA=$REUSE_DATA"
+if [[ "$EXECUTOR" == "hadoop" ]]; then
+  log "HDFS_DATASET_BASE_DIR=$HDFS_DATASET_BASE_DIR"
+  log "HDFS_BASE_WORK_ROOT=$HDFS_BASE_WORK_ROOT"
+  log "HADOOP_CONF_DIR=$HADOOP_CONF_DIR"
+fi
 
 log "Building classes once before the sweep"
 run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build.sh"
@@ -82,6 +99,12 @@ for workflow in $WORKFLOWS; do
       REUSE_DATA="$REUSE_DATA" \
       EXECUTOR="$EXECUTOR" \
       DOCKER_IMAGE="$DOCKER_IMAGE" \
+      HDFS_DATA_ROOT="$HDFS_DATASET_BASE_DIR/$workflow" \
+      HDFS_BASE_WORK_ROOT="$HDFS_BASE_WORK_ROOT" \
+      HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
+      HADOOP_FS_DEFAULT="$HADOOP_FS_DEFAULT" \
+      HADOOP_FRAMEWORK_NAME="$HADOOP_FRAMEWORK_NAME" \
+      HADOOP_YARN_RM="$HADOOP_YARN_RM" \
       GENE2LIFE_JAVA_OPTS="$GENE2LIFE_JAVA_OPTS" \
       "$ROOT_DIR/scripts/server-benchmark.sh"; then
       log "FAILED $run_name"

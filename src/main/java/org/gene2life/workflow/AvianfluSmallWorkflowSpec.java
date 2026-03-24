@@ -1,6 +1,7 @@
 package org.gene2life.workflow;
 
 import org.gene2life.cli.CliArguments;
+import org.gene2life.hadoop.HadoopTaskInputs;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.TaskType;
@@ -118,6 +119,52 @@ public final class AvianfluSmallWorkflowSpec implements WorkflowSpec {
                             trainingOutputPath(dataRoot, "auto-grid"),
                             trainingOutputPath(dataRoot, "prepare-dpf"),
                             dataRoot.resolve("training/ligands").resolve("ligand-001.tsv")),
+                    outputDirectory,
+                    Map.of("ligand_id", "001"));
+            default -> throw new IllegalArgumentException("Unknown avianflu_small training job: " + jobId);
+        };
+    }
+
+    @Override
+    public HadoopTaskInputs resolveHadoopInputs(String jobId, String dataRoot, String runRoot) {
+        String outputDirectory = hdfsJobDirectory(runRoot, jobId);
+        return switch (jobId) {
+            case "prepare-receptor" -> new HadoopTaskInputs(List.of(normalizeHdfsPath(dataRoot) + "/receptor.tsv"), outputDirectory, Map.of());
+            case "prepare-gpf" -> new HadoopTaskInputs(List.of(
+                    hadoopOutputPath("prepare-receptor", hdfsJobDirectory(runRoot, "prepare-receptor")),
+                    normalizeHdfsPath(dataRoot) + "/grid-template.tsv"), outputDirectory, Map.of());
+            case "prepare-dpf" -> new HadoopTaskInputs(List.of(normalizeHdfsPath(dataRoot) + "/ligand-library.tsv"), outputDirectory, Map.of());
+            case "auto-grid" -> new HadoopTaskInputs(List.of(
+                    hadoopOutputPath("prepare-gpf", hdfsJobDirectory(runRoot, "prepare-gpf"))), outputDirectory, Map.of());
+            default -> {
+                if (!jobId.startsWith("autodock-")) {
+                    throw new IllegalArgumentException("Unknown avianflu_small job: " + jobId);
+                }
+                String ligandId = jobId.substring("autodock-".length());
+                yield new HadoopTaskInputs(List.of(
+                        hadoopOutputPath("auto-grid", hdfsJobDirectory(runRoot, "auto-grid")),
+                        hadoopOutputPath("prepare-dpf", hdfsJobDirectory(runRoot, "prepare-dpf")),
+                        normalizeHdfsPath(dataRoot) + "/ligands/ligand-" + ligandId + ".tsv"),
+                        outputDirectory,
+                        Map.of("ligand_id", ligandId));
+            }
+        };
+    }
+
+    @Override
+    public HadoopTaskInputs resolveHadoopTrainingInputs(String jobId, String dataRoot) {
+        String outputDirectory = normalizeHdfsPath(dataRoot) + "/training/generated/" + jobId;
+        return switch (jobId) {
+            case "prepare-receptor" -> new HadoopTaskInputs(List.of(normalizeHdfsPath(dataRoot) + "/training/receptor.tsv"), outputDirectory, Map.of());
+            case "prepare-gpf" -> new HadoopTaskInputs(List.of(
+                    hadoopTrainingOutputPath(dataRoot, "prepare-receptor"),
+                    normalizeHdfsPath(dataRoot) + "/training/grid-template.tsv"), outputDirectory, Map.of());
+            case "prepare-dpf" -> new HadoopTaskInputs(List.of(normalizeHdfsPath(dataRoot) + "/training/ligand-library.tsv"), outputDirectory, Map.of());
+            case "auto-grid" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "prepare-gpf")), outputDirectory, Map.of());
+            case "autodock-001" -> new HadoopTaskInputs(List.of(
+                    hadoopTrainingOutputPath(dataRoot, "auto-grid"),
+                    hadoopTrainingOutputPath(dataRoot, "prepare-dpf"),
+                    normalizeHdfsPath(dataRoot) + "/training/ligands/ligand-001.tsv"),
                     outputDirectory,
                     Map.of("ligand_id", "001"));
             default -> throw new IllegalArgumentException("Unknown avianflu_small training job: " + jobId);

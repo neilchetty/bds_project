@@ -1,6 +1,6 @@
 # Big-Workflow Scheduling Java Implementation
 
-This repository implements the paper's workflow-scheduling comparison in Java with real file-processing tasks, Docker-isolated logical nodes, and workflow-specific data generators. It now supports all three workflows discussed in the paper:
+This repository implements the paper's workflow-scheduling comparison in Java with real file-processing tasks, Hadoop/HDFS-backed execution, optional Docker-isolated logical nodes, and workflow-specific data generators. It now supports all three workflows discussed in the paper:
 
 - `gene2life`: 8 jobs
 - `avianflu_small`: 104 jobs
@@ -13,7 +13,8 @@ The project is not a simulator-only model. Each task reads and writes real files
 - Modular workflow definitions under `src/main/java/org/gene2life/workflow`.
 - Real task executors for all supported workflow stages under `src/main/java/org/gene2life/task/WorkflowTaskExecutors.java`.
 - `WSH` and `HEFT` schedulers.
-- Docker-backed logical nodes for isolated execution on one physical host.
+- Hadoop/HDFS execution for distributed processing.
+- Docker-backed logical nodes for isolated single-host fallback execution.
 - Paper-style heterogeneous cluster profiles and host-scaled profiles.
 - Run reports with schedule plans, actual run metrics, and scheduler comparison output.
 
@@ -84,10 +85,11 @@ The scheduler, report writer, Docker executor, and CLI all operate on the generi
 - `src/main/java/org/gene2life/task`: workflow task executors
 - `src/main/java/org/gene2life/scheduler`: `WSH`, `HEFT`, duration model, training benchmarks
 - `src/main/java/org/gene2life/execution`: workflow executor, node runtime, Docker node pool
+- `src/main/java/org/gene2life/hadoop`: Hadoop/HDFS execution backend
 - `config/clusters-paper.csv`: literal paper-style VM capacities
 - `config/clusters-z4-g5-paper-sweep.csv`: paper-style 12-node sweep profile pinned onto the Ubuntu host
 - `config/clusters-z4-g5-paper-sweep-scaled.csv`: stronger logical-node version of the same four-subcluster pattern
-- `scripts/build.sh`: plain `javac` build
+- `scripts/build.sh`: Maven build with Docker fallback when `mvn` is unavailable
 - `scripts/run.sh`: CLI launcher
 - `scripts/build-image.sh`: Docker image builder
 - `scripts/server-benchmark.sh`: workflow-aware benchmark launcher
@@ -97,6 +99,13 @@ The scheduler, report writer, Docker executor, and CLI all operate on the generi
 ```bash
 ./scripts/build.sh
 ```
+
+## Prerequisites
+
+- Java 17
+- Hadoop 3.x client and cluster access for `EXECUTOR=hadoop`
+- `HADOOP_CONF_DIR` pointing at valid `core-site.xml`, `hdfs-site.xml`, `mapred-site.xml`, and `yarn-site.xml` when running against Hadoop
+- Docker only if you want the fallback `EXECUTOR=docker` path
 
 ## Quick Start
 
@@ -140,7 +149,8 @@ Run a scheduler:
   --workspace work/gene2life-demo \
   --data-root work/gene2life-demo/data \
   --cluster-config config/clusters-server.csv \
-  --scheduler wsh
+  --scheduler wsh \
+  --executor local
 ```
 
 Run a comparison:
@@ -152,8 +162,24 @@ Run a comparison:
   --data-root work/gene2life-demo/data \
   --cluster-config config/clusters-server.csv \
   --rounds 4 \
+  --executor local \
   --training-warmup-runs 1 \
   --training-measure-runs 3
+```
+
+Run through Hadoop/HDFS:
+
+```bash
+./scripts/run.sh compare \
+  --workflow gene2life \
+  --workspace work/gene2life-hadoop \
+  --data-root work/gene2life-hadoop/data \
+  --cluster-config config/clusters-z4-g5-paper-sweep.csv \
+  --rounds 4 \
+  --executor hadoop \
+  --hdfs-data-root /gene2life/data/gene2life \
+  --hdfs-work-root /gene2life/work \
+  --hadoop-conf-dir "$HADOOP_CONF_DIR"
 ```
 
 ## Runtime Positioning
@@ -182,7 +208,7 @@ WORKFLOW=epigenomics \
 PROFILE=medium \
 CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
 COMPARE_ROUNDS=4 \
-EXECUTOR=docker \
+EXECUTOR=hadoop \
 ./scripts/server-benchmark.sh
 ```
 
@@ -197,12 +223,23 @@ for nodes in 4 7 10 12; do
   COMPARE_ROUNDS=4 \
   TRAINING_WARMUP_RUNS=1 \
   TRAINING_MEASURE_RUNS=3 \
-  EXECUTOR=docker \
+  EXECUTOR=hadoop \
   ./scripts/server-benchmark.sh
 done
 ```
 
 The benchmark scripts now reuse one dataset per workflow by default. Generation parameters are stored in `DATA_ROOT/.generation-metadata.env`, and regeneration happens only when those parameters change.
+
+## Execution Backends
+
+The benchmark scripts default to `EXECUTOR=hadoop`. That path:
+
+- keeps generated datasets on local disk
+- mirrors them into HDFS once per workflow dataset revision
+- submits one Hadoop job per workflow stage
+- writes stage outputs back to HDFS and mirrors the final files into the local run workspace for reports
+
+`EXECUTOR=docker` and `EXECUTOR=local` remain available for fallback debugging.
 
 ## Docker
 
@@ -242,9 +279,11 @@ Heavy Docker benchmarks should still be run on the Ubuntu server.
 
 ## Limitations
 
-- This is a standalone Java workflow engine, not a full Hi-WAY/Hadoop deployment.
+- This is not a reimplementation of Hi-WAY itself; it is a custom Java workflow engine that now executes stages through Hadoop/HDFS.
 - The biological tools are Java workload approximations, not wrappers around native `blast`, `clustalw`, `autodock`, `maq`, or PHYLIP binaries.
-- Docker-isolated logical nodes on one host are closer to the paper than one-JVM execution, but still not identical to separate VMs or a distributed Hadoop cluster.
+- The Hadoop backend relies on your cluster's Hadoop/YARN deployment and configuration.
+- In Hadoop mode, logical node assignment drives scheduler modeling and requested container resources, but YARN still controls final physical placement unless you add queue or node-label policies outside this repository.
+- Docker-isolated logical nodes on one host are a fallback mode, not the primary Big Data execution path.
 
 ## Additional Documentation
 

@@ -1,5 +1,6 @@
 package org.gene2life.execution;
 
+import org.gene2life.hadoop.HadoopJobRunner;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.NodeProfile;
@@ -24,6 +25,7 @@ public final class TrainingRunner {
     private final Map<String, TaskExecutor> executors;
     private final ExecutionMode executionMode;
     private final DockerNodePool dockerNodePool;
+    private final HadoopJobRunner hadoopJobRunner;
     private final int warmupRuns;
     private final int measurementRuns;
 
@@ -32,12 +34,14 @@ public final class TrainingRunner {
             Map<String, TaskExecutor> executors,
             ExecutionMode executionMode,
             DockerNodePool dockerNodePool,
+            HadoopJobRunner hadoopJobRunner,
             int warmupRuns,
             int measurementRuns) {
         this.workflowSpec = workflowSpec;
         this.executors = executors;
         this.executionMode = executionMode;
         this.dockerNodePool = dockerNodePool;
+        this.hadoopJobRunner = hadoopJobRunner;
         this.warmupRuns = Math.max(0, warmupRuns);
         this.measurementRuns = Math.max(1, measurementRuns);
     }
@@ -51,12 +55,12 @@ public final class TrainingRunner {
             for (JobDefinition job : workflowSpec.definition().trainingRepresentativeJobs()) {
                 TaskInputs inputs = workflowSpec.resolveTrainingInputs(job.id(), dataRoot);
                 for (int warmup = 0; warmup < warmupRuns; warmup++) {
-                    executeTrainingSample(job.id(), node, inputs);
+                    executeTrainingSample(job.id(), node, inputs, dataRoot);
                 }
                 List<Long> measuredDurations = new ArrayList<>();
                 for (int sample = 0; sample < measurementRuns; sample++) {
                     long start = System.currentTimeMillis();
-                    executeTrainingSample(job.id(), node, inputs);
+                    executeTrainingSample(job.id(), node, inputs, dataRoot);
                     long finish = System.currentTimeMillis();
                     measuredDurations.add(Math.max(1L, finish - start));
                 }
@@ -71,10 +75,17 @@ public final class TrainingRunner {
         return new TrainingBenchmarks(durations, classifications, warmupRuns, measurementRuns);
     }
 
-    private TaskResult executeTrainingSample(String jobId, NodeProfile node, TaskInputs inputs) throws Exception {
-        return executionMode == ExecutionMode.DOCKER
-                ? dockerNodePool.execute(workflowSpec, node, jobId, inputs)
-                : executors.get(jobId).execute(inputs, node);
+    private TaskResult executeTrainingSample(String jobId, NodeProfile node, TaskInputs inputs, Path dataRoot) throws Exception {
+        return switch (executionMode) {
+            case LOCAL -> executors.get(jobId).execute(inputs, node);
+            case DOCKER -> dockerNodePool.execute(workflowSpec, node, jobId, inputs);
+            case HADOOP -> {
+                if (hadoopJobRunner == null) {
+                    throw new IllegalStateException("Hadoop executor selected without Hadoop job runner");
+                }
+                yield hadoopJobRunner.executeTrainingJob(workflowSpec, jobId, node, dataRoot);
+            }
+        };
     }
 
     private long median(List<Long> values) {

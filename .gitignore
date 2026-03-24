@@ -1,4 +1,7 @@
 build/
+target/
+.m2/
+?/
 work/
 *.txt
 page5-05.png

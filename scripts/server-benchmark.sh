@@ -11,8 +11,14 @@ GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxG
 export GENE2LIFE_JAVA_OPTS
 COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
 MAX_NODES="${MAX_NODES:-0}"
-EXECUTOR="${EXECUTOR:-docker}"
+EXECUTOR="${EXECUTOR:-hadoop}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
+HDFS_DATA_ROOT="${HDFS_DATA_ROOT:-/gene2life/data/$WORKFLOW}"
+HDFS_BASE_WORK_ROOT="${HDFS_BASE_WORK_ROOT:-/gene2life/work}"
+HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${HADOOP_HOME:-}/etc/hadoop}"
+HADOOP_FS_DEFAULT="${HADOOP_FS_DEFAULT:-}"
+HADOOP_FRAMEWORK_NAME="${HADOOP_FRAMEWORK_NAME:-yarn}"
+HADOOP_YARN_RM="${HADOOP_YARN_RM:-}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
 REUSE_DATA="${REUSE_DATA:-true}"
@@ -112,6 +118,19 @@ if [[ "$EXECUTOR" == "docker" ]]; then
   "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
 fi
 
+if [[ "$EXECUTOR" == "hadoop" ]]; then
+  if [[ -z "$HADOOP_CONF_DIR" || ! -d "$HADOOP_CONF_DIR" ]]; then
+    echo "HADOOP_CONF_DIR must point to a valid Hadoop configuration directory when EXECUTOR=hadoop" >&2
+    exit 1
+  fi
+  for required in core-site.xml hdfs-site.xml mapred-site.xml yarn-site.xml; do
+    if [[ ! -f "$HADOOP_CONF_DIR/$required" ]]; then
+      echo "Missing $required under HADOOP_CONF_DIR=$HADOOP_CONF_DIR" >&2
+      exit 1
+    fi
+  done
+fi
+
 if [[ ! -f "$CLUSTER_CONFIG" ]]; then
   "$ROOT_DIR/scripts/generate-cluster-config.sh" "$CLUSTER_CONFIG"
 fi
@@ -158,7 +177,13 @@ fi
   --training-warmup-runs "$TRAINING_WARMUP_RUNS" \
   --training-measure-runs "$TRAINING_MEASURE_RUNS" \
   --executor "$EXECUTOR" \
-  --docker-image "$DOCKER_IMAGE"
+  --docker-image "$DOCKER_IMAGE" \
+  --hdfs-data-root "$HDFS_DATA_ROOT" \
+  --hdfs-work-root "$HDFS_BASE_WORK_ROOT" \
+  --hadoop-conf-dir "$HADOOP_CONF_DIR" \
+  --hadoop-fs-default "$HADOOP_FS_DEFAULT" \
+  --hadoop-framework-name "$HADOOP_FRAMEWORK_NAME" \
+  --hadoop-yarn-rm "$HADOOP_YARN_RM"
 
 echo "Benchmark outputs:"
 echo "  $WORKSPACE/comparison.md"
@@ -180,6 +205,14 @@ echo "  $EXECUTOR"
 if [[ "$EXECUTOR" == "docker" ]]; then
   echo "Docker image:"
   echo "  $DOCKER_IMAGE"
+fi
+if [[ "$EXECUTOR" == "hadoop" ]]; then
+  echo "HDFS data root:"
+  echo "  $HDFS_DATA_ROOT"
+  echo "HDFS work root:"
+  echo "  $HDFS_BASE_WORK_ROOT"
+  echo "Hadoop conf dir:"
+  echo "  $HADOOP_CONF_DIR"
 fi
 if [[ "$MAX_NODES" != "0" ]]; then
   echo "Node limit:"

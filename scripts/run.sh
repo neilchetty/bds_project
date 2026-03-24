@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_JAR="$ROOT_DIR/target/gene2life-app.jar"
 
-if [[ ! -d "$ROOT_DIR/build/classes" ]]; then
+if [[ ! -f "$APP_JAR" ]]; then
   "$ROOT_DIR/scripts/build.sh"
 fi
 
@@ -11,7 +12,7 @@ JAVA_OPTS_STRING="${GENE2LIFE_JAVA_OPTS:-${JAVA_OPTS:-}}"
 
 if [[ -n "$JAVA_OPTS_STRING" ]]; then
   read -r -a JAVA_OPTS_ARRAY <<< "$JAVA_OPTS_STRING"
-  java "${JAVA_OPTS_ARRAY[@]}" -cp "$ROOT_DIR/build/classes" org.gene2life.cli.Main "$@"
+  java "${JAVA_OPTS_ARRAY[@]}" -jar "$APP_JAR" "$@"
 else
-  java -cp "$ROOT_DIR/build/classes" org.gene2life.cli.Main "$@"
+  java -jar "$APP_JAR" "$@"
 fi

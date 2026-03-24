@@ -2,11 +2,25 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/build/classes"
+cd "$ROOT_DIR"
+rm -rf "$ROOT_DIR/target"
 
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR"
+if command -v mvn >/dev/null 2>&1; then
+  mvn -q -DskipTests package
+elif command -v docker >/dev/null 2>&1; then
+  mkdir -p "$ROOT_DIR/.m2"
+  docker run --rm \
+    -u "$(id -u):$(id -g)" \
+    -v "$ROOT_DIR":/workspace \
+    -v "$ROOT_DIR/.m2":/tmp/m2 \
+    -w /workspace \
+    -e MAVEN_CONFIG=/tmp/m2 \
+    -e HOME=/tmp \
+    maven:3.9.9-eclipse-temurin-17 \
+    mvn -q -DskipTests -Dmaven.repo.local=/tmp/m2/repository package
+else
+  echo "Neither mvn nor docker is available for building the project." >&2
+  exit 1
+fi
 
-javac --release 17 -d "$BUILD_DIR" $(find "$ROOT_DIR/src/main/java" -name '*.java' | sort)
-
-echo "Compiled classes into $BUILD_DIR"
+echo "Built $ROOT_DIR/target/gene2life-app.jar"

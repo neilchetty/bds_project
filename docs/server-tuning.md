@@ -8,13 +8,14 @@ This guide targets the reported Ubuntu 24.04 workstation:
 - 62.44 GiB RAM
 - local ext4 storage
 - Docker available
+- Hadoop/HDFS/YARN expected for the primary execution mode
 
 ## General Defaults
 
 - Run heavy benchmarks on the Ubuntu server, not the Mac Mini.
 - Keep the workspace on local disk.
-- Use Docker execution for scheduler studies:
-  - `EXECUTOR=docker`
+- Use Hadoop execution for scheduler studies:
+  - `EXECUTOR=hadoop`
 - Start with:
   - `PROFILE=medium`
   - `COMPARE_ROUNDS=4`
@@ -72,7 +73,8 @@ Run the default `gene2life` benchmark:
 chmod +x ./scripts/server-benchmark.sh
 PROFILE=medium \
 CLUSTER_CONFIG=./config/clusters-z4-g5.csv \
-EXECUTOR=docker \
+EXECUTOR=hadoop \
+HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
 ./scripts/server-benchmark.sh
 ```
 
@@ -83,7 +85,7 @@ WORKFLOW=avianflu_small \
 PROFILE=medium \
 CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
 COMPARE_ROUNDS=4 \
-EXECUTOR=docker \
+EXECUTOR=hadoop \
 ./scripts/server-benchmark.sh
 ```
 
@@ -94,7 +96,7 @@ WORKFLOW=epigenomics \
 PROFILE=medium \
 CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
 COMPARE_ROUNDS=4 \
-EXECUTOR=docker \
+EXECUTOR=hadoop \
 ./scripts/server-benchmark.sh
 ```
 
@@ -109,7 +111,7 @@ for nodes in 4 7 10 12; do
   COMPARE_ROUNDS=4 \
   TRAINING_WARMUP_RUNS=1 \
   TRAINING_MEASURE_RUNS=3 \
-  EXECUTOR=docker \
+  EXECUTOR=hadoop \
   ./scripts/server-benchmark.sh
 done
 ```
@@ -120,11 +122,12 @@ done
 - `compare` alternates scheduler order across rounds to reduce warm-cache and JVM bias.
 - Use the same generated dataset while changing only scheduler or node count.
 - If memory pressure appears, reduce workflow-specific dataset size before increasing JVM heap.
-- If Docker runs fail unexpectedly, rebuild the image with `./scripts/build-image.sh`.
-- Persistent logical node containers are created per scheduler run and cleaned up afterwards.
+- If Hadoop submission fails unexpectedly, verify `HADOOP_CONF_DIR`, HDFS reachability, and YARN resource availability first.
+- Docker remains available as a secondary backend for local fallback and debugging.
+- If you need strict physical-node affinity, add YARN queue or node-label rules outside this repository; the current code requests per-job resources but does not hard-pin containers to hosts by itself.
 
 ## Interpretation Notes
 
 - Results on the Ubuntu host are meaningful for relative scheduler behavior on your server.
-- They are not identical to a real multi-VM Hi-WAY/Hadoop deployment.
+- This is still not Hi-WAY itself, but the primary execution path now goes through Hadoop/HDFS rather than a custom-only local runtime.
 - The paper-style sweep profile is the closest configuration in this repository when the goal is structural similarity to the paper.

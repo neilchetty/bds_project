@@ -1,0 +1,169 @@
+package org.gene2life.hadoop;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
+import org.gene2life.model.NodeProfile;
+import org.gene2life.task.TaskExecutor;
+import org.gene2life.task.TaskInputs;
+import org.gene2life.task.TaskResult;
+import org.gene2life.workflow.WorkflowRegistry;
+import org.gene2life.workflow.WorkflowSpec;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+public final class HadoopTaskJob {
+    public static final String CONF_WORKFLOW = "gene2life.hadoop.workflow";
+    public static final String CONF_JOB_ID = "gene2life.hadoop.jobId";
+    public static final String CONF_INPUT_COUNT = "gene2life.hadoop.input.count";
+    public static final String CONF_OUTPUT_PATH = "gene2life.hadoop.output.path";
+    public static final String CONF_OUTPUT_DESCRIPTION = "gene2life.hadoop.output.description";
+    public static final String CONF_CLUSTER_ID = "gene2life.hadoop.node.clusterId";
+    public static final String CONF_NODE_ID = "gene2life.hadoop.node.nodeId";
+    public static final String CONF_CPU_THREADS = "gene2life.hadoop.node.cpuThreads";
+    public static final String CONF_IO_BUFFER_KB = "gene2life.hadoop.node.ioBufferKb";
+    public static final String CONF_MEMORY_MB = "gene2life.hadoop.node.memoryMb";
+    public static final String CONF_PARAM_COUNT = "gene2life.hadoop.param.count";
+
+    private HadoopTaskJob() {
+    }
+
+    public static void configureTask(
+            Configuration configuration,
+            WorkflowSpec workflowSpec,
+            String jobId,
+            NodeProfile nodeProfile,
+            HadoopTaskInputs inputs,
+            String outputPath,
+            String outputDescription) {
+        configuration.set(CONF_WORKFLOW, workflowSpec.workflowId());
+        configuration.set(CONF_JOB_ID, jobId);
+        configuration.set(CONF_OUTPUT_PATH, outputPath);
+        configuration.set(CONF_OUTPUT_DESCRIPTION, outputDescription);
+        configuration.set(CONF_CLUSTER_ID, nodeProfile.clusterId());
+        configuration.set(CONF_NODE_ID, nodeProfile.nodeId());
+        configuration.setInt(CONF_CPU_THREADS, nodeProfile.cpuThreads());
+        configuration.setInt(CONF_IO_BUFFER_KB, nodeProfile.ioBufferKb());
+        configuration.setInt(CONF_MEMORY_MB, nodeProfile.memoryMb());
+        configuration.setInt(CONF_INPUT_COUNT, inputs.inputs().size());
+        for (int index = 0; index < inputs.inputs().size(); index++) {
+            configuration.set(inputKey(index), inputs.inputs().get(index));
+        }
+        configuration.setInt(CONF_PARAM_COUNT, inputs.parameters().size());
+        int paramIndex = 0;
+        for (Map.Entry<String, String> entry : inputs.parameters().entrySet()) {
+            configuration.set(paramKey(paramIndex), entry.getKey() + "=" + entry.getValue());
+            paramIndex++;
+        }
+    }
+
+    public static Job createJob(Configuration configuration, String jobName, String controlInputPath) throws IOException {
+        Job job = Job.getInstance(configuration, jobName);
+        job.setJarByClass(HadoopTaskJob.class);
+        job.setMapperClass(TaskMapper.class);
+        job.setInputFormatClass(TextInputFormat.class);
+        job.setOutputFormatClass(NullOutputFormat.class);
+        job.setNumReduceTasks(0);
+        job.setMapOutputKeyClass(NullWritable.class);
+        job.setMapOutputValueClass(Text.class);
+        FileInputFormat.addInputPath(job, new org.apache.hadoop.fs.Path(controlInputPath));
+        return job;
+    }
+
+    public static final class TaskMapper extends Mapper<LongWritable, Text, NullWritable, Text> {
+        @Override
+        protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            Configuration configuration = context.getConfiguration();
+            WorkflowSpec workflowSpec = WorkflowRegistry.byId(configuration.get(CONF_WORKFLOW));
+            String jobId = configuration.get(CONF_JOB_ID);
+            NodeProfile nodeProfile = new NodeProfile(
+                    configuration.get(CONF_CLUSTER_ID),
+                    configuration.get(CONF_NODE_ID),
+                    configuration.getInt(CONF_CPU_THREADS, 1),
+                    configuration.getInt(CONF_IO_BUFFER_KB, 256),
+                    configuration.getInt(CONF_MEMORY_MB, 1024));
+            List<Path> localInputs = new ArrayList<>();
+            Path workDir = Files.createTempDirectory("gene2life-hadoop-task-");
+            try {
+                FileSystem fileSystem = FileSystem.get(configuration);
+                int inputCount = configuration.getInt(CONF_INPUT_COUNT, 0);
+                for (int index = 0; index < inputCount; index++) {
+                    org.apache.hadoop.fs.Path source = new org.apache.hadoop.fs.Path(configuration.get(inputKey(index)));
+                    String fileName = source.getName();
+                    if (fileName == null || fileName.isBlank()) {
+                        fileName = "input-" + index;
+                    }
+                    Path localPath = workDir.resolve(index + "-" + fileName);
+                    fileSystem.copyToLocalFile(false, source, new org.apache.hadoop.fs.Path(localPath.toAbsolutePath().toString()), true);
+                    localInputs.add(localPath);
+                }
+                Path localOutputDir = workDir.resolve("output");
+                Files.createDirectories(localOutputDir);
+                TaskInputs taskInputs = new TaskInputs(localInputs, localOutputDir, readParameters(configuration));
+                TaskExecutor executor = workflowSpec.executors().get(jobId);
+                if (executor == null) {
+                    throw new IllegalArgumentException("Unknown workflow job: " + workflowSpec.workflowId() + "/" + jobId);
+                }
+                TaskResult result = executor.execute(taskInputs, nodeProfile);
+                org.apache.hadoop.fs.Path hdfsOutputPath = new org.apache.hadoop.fs.Path(configuration.get(CONF_OUTPUT_PATH));
+                org.apache.hadoop.fs.Path parent = hdfsOutputPath.getParent();
+                if (parent != null) {
+                    fileSystem.mkdirs(parent);
+                }
+                fileSystem.copyFromLocalFile(false, true,
+                        new org.apache.hadoop.fs.Path(result.outputPath().toAbsolutePath().toString()),
+                        hdfsOutputPath);
+            } catch (Exception exception) {
+                throw new IOException("Hadoop task execution failed for " + jobId, exception);
+            } finally {
+                deleteRecursively(workDir);
+            }
+        }
+
+        private static Map<String, String> readParameters(Configuration configuration) {
+            int count = configuration.getInt(CONF_PARAM_COUNT, 0);
+            java.util.LinkedHashMap<String, String> parameters = new java.util.LinkedHashMap<>();
+            for (int index = 0; index < count; index++) {
+                String[] parts = configuration.get(paramKey(index), "").split("=", 2);
+                if (parts.length == 2) {
+                    parameters.put(parts[0], parts[1]);
+                }
+            }
+            return Map.copyOf(parameters);
+        }
+
+        private static void deleteRecursively(Path path) throws IOException {
+            if (path == null || !Files.exists(path)) {
+                return;
+            }
+            try (var stream = Files.walk(path)) {
+                stream.sorted(java.util.Comparator.reverseOrder()).forEach(candidate -> {
+                    try {
+                        Files.deleteIfExists(candidate);
+                    } catch (IOException ignored) {
+                    }
+                });
+            }
+        }
+    }
+
+    private static String inputKey(int index) {
+        return "gene2life.hadoop.input." + index;
+    }
+
+    private static String paramKey(int index) {
+        return "gene2life.hadoop.param." + index;
+    }
+}

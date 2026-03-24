@@ -1,6 +1,7 @@
 package org.gene2life.workflow;
 
 import org.gene2life.cli.CliArguments;
+import org.gene2life.hadoop.HadoopTaskInputs;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.WorkflowDefinition;
@@ -23,6 +24,10 @@ public interface WorkflowSpec {
     TaskInputs resolveInputs(String jobId, Path dataRoot, Path runRoot, Map<String, Future<JobRun>> futures) throws Exception;
 
     TaskInputs resolveTrainingInputs(String jobId, Path dataRoot) throws Exception;
+
+    HadoopTaskInputs resolveHadoopInputs(String jobId, String dataRoot, String runRoot) throws Exception;
+
+    HadoopTaskInputs resolveHadoopTrainingInputs(String jobId, String dataRoot) throws Exception;
 
     default Map<String, TaskExecutor> executors() {
         Map<String, TaskExecutor> executors = new LinkedHashMap<>();
@@ -54,10 +59,37 @@ public interface WorkflowSpec {
                 .resolve(definition().job(jobId).taskType().outputFileName());
     }
 
+    default String hadoopOutputPath(String jobId, String outputDirectory) {
+        return normalizeHdfsPath(outputDirectory) + "/" + definition().job(jobId).taskType().outputFileName();
+    }
+
+    default String hadoopTrainingOutputPath(String dataRoot, String jobId) {
+        return normalizeHdfsPath(dataRoot) + "/training/generated/" + jobId + "/"
+                + definition().job(jobId).taskType().outputFileName();
+    }
+
     default void ensureTrainingParents(Path dataRoot) throws IOException {
         Files.createDirectories(dataRoot.resolve("training/generated"));
         for (JobDefinition job : definition().trainingRepresentativeJobs()) {
             Files.createDirectories(dataRoot.resolve("training/generated").resolve(job.id()));
         }
+    }
+
+    default String hdfsJobDirectory(String runRoot, String jobId) {
+        return normalizeHdfsPath(runRoot) + "/jobs/" + jobId;
+    }
+
+    default String normalizeHdfsPath(String value) {
+        if (value == null || value.isBlank()) {
+            return "/";
+        }
+        String normalized = value.replaceAll("/{2,}", "/");
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        if (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 }

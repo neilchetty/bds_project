@@ -106,8 +106,8 @@ These datasets are intended to preserve workflow pressure and file-processing be
 
 ## What Still Differs From The Paper
 
-- execution uses a standalone Java engine, not native Hi-WAY/Hadoop/YARN
-- Docker-isolated logical nodes share one host kernel
+- execution now uses Hadoop/HDFS for stage submission and data movement, but it is still not native Hi-WAY
+- Docker-isolated logical nodes remain an optional fallback and share one host kernel
 - Java tasks approximate the original bioinformatics tools instead of invoking the original native binaries
 
-So the project now matches the workflow structures and scheduler comparison setup much more closely, but it is still a paper-inspired reproduction rather than a byte-for-byte recreation of the original software stack.
+So the project now matches the workflow structures and the Big Data execution layer much more closely, but it is still a paper-inspired reproduction rather than a byte-for-byte recreation of the original software stack.
