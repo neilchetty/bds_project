@@ -6,7 +6,8 @@ public record HadoopExecutionConfig(
         String hadoopConfDir,
         String fsDefaultFs,
         String frameworkName,
-        String yarnResourceManagerAddress) {
+        String yarnResourceManagerAddress,
+        boolean enableNodeLabels) {
 
     public String normalizedDataRoot() {
         return normalize(hdfsDataRoot);

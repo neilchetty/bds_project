@@ -70,7 +70,7 @@ public final class TrainingRunner {
         for (JobDefinition job : workflowSpec.definition().trainingRepresentativeJobs()) {
             Map<String, Long> corrected = correctedDurations(job, clusters, durations.get(job.trainingProfileKey()));
             durations.put(job.trainingProfileKey(), corrected);
-            classifications.put(job.trainingProfileKey(), job.taskType().defaultClassification());
+            classifications.put(job.trainingProfileKey(), derivedClassification(job, corrected));
         }
         return new TrainingBenchmarks(durations, classifications, warmupRuns, measurementRuns);
     }
@@ -111,5 +111,23 @@ public final class TrainingRunner {
             fallback.put(cluster.clusterId(), DurationModel.estimateDuration(job, cluster.firstNode()));
         }
         return fallback;
+    }
+
+    private String derivedClassification(JobDefinition job, Map<String, Long> correctedDurations) {
+        String defaultClassification = job.taskType().defaultClassification();
+        if ("io".equals(defaultClassification) || correctedDurations == null || correctedDurations.isEmpty()) {
+            return defaultClassification;
+        }
+        long min = correctedDurations.values().stream().mapToLong(Long::longValue).min().orElse(0L);
+        long max = correctedDurations.values().stream().mapToLong(Long::longValue).max().orElse(0L);
+        if (min <= 0L) {
+            return defaultClassification;
+        }
+        long absoluteSpread = Math.abs(max - min);
+        double relativeSpread = absoluteSpread / (double) min;
+        if (absoluteSpread <= 250L || relativeSpread <= 0.12d) {
+            return "io";
+        }
+        return defaultClassification;
     }
 }

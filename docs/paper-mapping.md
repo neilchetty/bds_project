@@ -84,6 +84,9 @@ The implementation stabilizes training with warmup runs plus repeated measured r
 - `config/clusters-paper.csv` uses the literal paper-style per-node capacities
 - `config/clusters-z4-g5-paper-sweep.csv` maps that same heterogeneous pattern onto the Ubuntu server with CPU pinning
 - `config/clusters-z4-g5-paper-sweep-scaled.csv` keeps the same four-subcluster pattern but increases logical-node capacity
+- `docs/hadoop-cluster.md` provisions those logical nodes as separate Hadoop worker containers, applies YARN node labels per homogeneous subcluster, and recreates the worker cluster per sweep target so smaller experiments do not accidentally run against extra online workers
+
+The paper reports total virtual-machine counts of `4/7/10/13`, which correspond to `1 master + 3/6/9/12 workers`. The new orchestration script follows that mapping directly.
 
 ## Data Mapping
 
@@ -106,7 +109,7 @@ These datasets are intended to preserve workflow pressure and file-processing be
 
 ## What Still Differs From The Paper
 
-- execution now uses Hadoop/HDFS for stage submission and data movement, but it is still not native Hi-WAY
+- execution now uses Hadoop/HDFS for stage submission and data movement, and the paper-closer path provisions separate Hadoop worker containers with YARN node labels, but it is still not native Hi-WAY
 - Docker-isolated logical nodes remain an optional fallback and share one host kernel
 - Java tasks approximate the original bioinformatics tools instead of invoking the original native binaries
 

@@ -33,6 +33,10 @@ public final class HadoopSupport {
         return executionConfig.normalizedWorkspaceRoot();
     }
 
+    public boolean enableNodeLabels() {
+        return executionConfig.enableNodeLabels();
+    }
+
     public void syncLocalDirectoryToHdfs(Path localRoot, String hdfsRoot) throws Exception {
         String metadata = localGenerationMetadata(localRoot);
         if (metadata != null) {

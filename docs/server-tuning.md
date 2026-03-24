@@ -10,6 +10,17 @@ This guide targets the reported Ubuntu 24.04 workstation:
 - Docker available
 - Hadoop/HDFS/YARN expected for the primary execution mode
 
+## Recommended Execution Mode
+
+For the closest paper-style execution on one physical server:
+
+- run the multi-worker Hadoop cluster in `docs/hadoop-cluster.md`
+- expose one worker container per selected logical node
+- enable `HADOOP_ENABLE_NODE_LABELS=true` so scheduler-assigned subclusters map to YARN node labels
+- prefer `scripts/run-paper-hadoop-sweeps.sh` over manually reusing one large cluster across all node counts
+
+The host-native single-node Hadoop installation is still useful for debugging, but it is less paper-faithful than the multi-worker containerized cluster.
+
 ## General Defaults
 
 - Run heavy benchmarks on the Ubuntu server, not the Mac Mini.
@@ -67,53 +78,36 @@ chmod +x ./scripts/generate-cluster-config.sh
 ./scripts/generate-cluster-config.sh ./config/clusters-autogen.csv
 ```
 
-Run the default `gene2life` benchmark:
+Run the paper-close multi-worker sweep:
 
 ```bash
-chmod +x ./scripts/server-benchmark.sh
+chmod +x ./scripts/run-paper-hadoop-sweeps.sh
 PROFILE=medium \
-CLUSTER_CONFIG=./config/clusters-z4-g5.csv \
-EXECUTOR=hadoop \
-HADOOP_CONF_DIR="$HADOOP_CONF_DIR" \
-./scripts/server-benchmark.sh
+./scripts/run-paper-hadoop-sweeps.sh
 ```
 
-Run `avianflu_small` through the same harness:
+Run only `avianflu_small`:
 
 ```bash
-WORKFLOW=avianflu_small \
+WORKFLOWS=avianflu_small \
 PROFILE=medium \
-CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
-COMPARE_ROUNDS=4 \
-EXECUTOR=hadoop \
-./scripts/server-benchmark.sh
+./scripts/run-paper-hadoop-sweeps.sh
 ```
 
-Run `epigenomics`:
+Run only `epigenomics`:
 
 ```bash
-WORKFLOW=epigenomics \
+WORKFLOWS=epigenomics \
 PROFILE=medium \
-CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
-COMPARE_ROUNDS=4 \
-EXECUTOR=hadoop \
-./scripts/server-benchmark.sh
+./scripts/run-paper-hadoop-sweeps.sh
 ```
 
-Run the paper-style node-count sweep for `gene2life`:
+Run only `gene2life` with the paper’s total-node counts:
 
 ```bash
-for nodes in 4 7 10 12; do
-  WORKSPACE="/data/gene2life-nodes-${nodes}" \
-  WORKFLOW=gene2life \
-  CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
-  MAX_NODES="$nodes" \
-  COMPARE_ROUNDS=4 \
-  TRAINING_WARMUP_RUNS=1 \
-  TRAINING_MEASURE_RUNS=3 \
-  EXECUTOR=hadoop \
-  ./scripts/server-benchmark.sh
-done
+WORKFLOWS=gene2life \
+TOTAL_NODE_COUNTS="4 7 10 13" \
+./scripts/run-paper-hadoop-sweeps.sh
 ```
 
 ## Practical Notes
@@ -121,6 +115,7 @@ done
 - For fair scheduler comparison, do not rely on a single back-to-back run.
 - `compare` alternates scheduler order across rounds to reduce warm-cache and JVM bias.
 - Use the same generated dataset while changing only scheduler or node count.
+- For the closest paper mapping, change cluster size by recreating the worker cluster for each target rather than leaving extra workers online.
 - If memory pressure appears, reduce workflow-specific dataset size before increasing JVM heap.
 - If Hadoop submission fails unexpectedly, verify `HADOOP_CONF_DIR`, HDFS reachability, and YARN resource availability first.
 - Docker remains available as a secondary backend for local fallback and debugging.

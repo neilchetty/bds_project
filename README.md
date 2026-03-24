@@ -93,6 +93,7 @@ The scheduler, report writer, Docker executor, and CLI all operate on the generi
 - `scripts/run.sh`: CLI launcher
 - `scripts/build-image.sh`: Docker image builder
 - `scripts/server-benchmark.sh`: workflow-aware benchmark launcher
+- `scripts/run-paper-hadoop-sweeps.sh`: paper-close multi-worker Hadoop sweep orchestrator
 
 ## Build
 
@@ -194,38 +195,54 @@ The workflow structures follow the paper, but the datasets are intentionally siz
 
 The intended benchmark target is the Ubuntu 24.04 workstation, not the Mac Mini.
 
-Build and run a default benchmark:
+For the closest paper-style setup on one physical server, use the multi-worker Hadoop cluster described in `docs/hadoop-cluster.md`. The simpler host-native Hadoop mode remains available, but it is a fallback path rather than the most paper-faithful option.
+
+The recommended path is now:
+
+- start a multi-worker Hadoop cluster on the Linux server, not on the Mac Mini
+- let the scheduler see the same heterogeneous subclusters described in the paper
+- run each node-count experiment against a cluster that exposes only that many worker nodes
+
+Run the paper-close orchestrated sweep:
 
 ```bash
-chmod +x ./scripts/server-benchmark.sh
-./scripts/server-benchmark.sh
+chmod +x ./scripts/run-paper-hadoop-sweeps.sh
+PROFILE=medium ./scripts/run-paper-hadoop-sweeps.sh
 ```
 
-Run another workflow through the same benchmark harness:
+This script:
+
+- provisions a fresh multi-worker Hadoop cluster for each paper node-count target
+- reuses one local dataset per workflow
+- mirrors data into HDFS for each fresh cluster
+- runs `gene2life`, `avianflu_small`, and `epigenomics`
+- stops the cluster cleanly before moving to the next node-count target
+
+The paper’s figures vary the total number of virtual machines as `4/7/10/13`, which corresponds to `1 master + 3/6/9/12 workers`. The orchestrator uses those total counts by default. If you prefer to control worker counts directly, set `WORKER_NODE_COUNTS`.
+
+Run only one workflow:
 
 ```bash
-WORKFLOW=epigenomics \
+WORKFLOWS=epigenomics \
 PROFILE=medium \
-CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
-COMPARE_ROUNDS=4 \
-EXECUTOR=hadoop \
-./scripts/server-benchmark.sh
+./scripts/run-paper-hadoop-sweeps.sh
 ```
 
-Run the paper-style node-count sweep:
+Run the older host-side benchmark harness against an already-running Hadoop cluster:
 
 ```bash
-for nodes in 4 7 10 12; do
-  WORKSPACE="/data/gene2life-nodes-${nodes}" \
+source /home/cse-sdpl/bds_project/work/hadoop-paper-cluster/cluster.env
+
+WORKSPACE=/home/cse-sdpl/bds_project/work/gene2life-hadoop \
   WORKFLOW=gene2life \
+  PROFILE=medium \
   CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
-  MAX_NODES="$nodes" \
+  MAX_NODES=12 \
   COMPARE_ROUNDS=4 \
   TRAINING_WARMUP_RUNS=1 \
   TRAINING_MEASURE_RUNS=3 \
   EXECUTOR=hadoop \
   ./scripts/server-benchmark.sh
-done
 ```
 
 The benchmark scripts now reuse one dataset per workflow by default. Generation parameters are stored in `DATA_ROOT/.generation-metadata.env`, and regeneration happens only when those parameters change.
@@ -277,6 +294,12 @@ Those smoke runs validate:
 
 Heavy Docker benchmarks should still be run on the Ubuntu server.
 
+## Additional Docs
+
+- `docs/hadoop-cluster.md`: paper-close multi-worker Hadoop setup and execution
+- `docs/server-tuning.md`: server-oriented profile, runtime, and workflow sizing guidance
+- `docs/paper-mapping.md`: paper-to-code mapping and remaining differences
+
 ## Limitations
 
 - This is not a reimplementation of Hi-WAY itself; it is a custom Java workflow engine that now executes stages through Hadoop/HDFS.
@@ -289,3 +312,4 @@ Heavy Docker benchmarks should still be run on the Ubuntu server.
 
 - `docs/paper-mapping.md`
 - `docs/server-tuning.md`
+- `docs/hadoop-cluster.md`

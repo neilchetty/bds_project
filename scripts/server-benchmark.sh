@@ -19,6 +19,7 @@ HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${HADOOP_HOME:-}/etc/hadoop}"
 HADOOP_FS_DEFAULT="${HADOOP_FS_DEFAULT:-}"
 HADOOP_FRAMEWORK_NAME="${HADOOP_FRAMEWORK_NAME:-yarn}"
 HADOOP_YARN_RM="${HADOOP_YARN_RM:-}"
+HADOOP_ENABLE_NODE_LABELS="${HADOOP_ENABLE_NODE_LABELS:-false}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
 REUSE_DATA="${REUSE_DATA:-true}"
@@ -183,7 +184,8 @@ fi
   --hadoop-conf-dir "$HADOOP_CONF_DIR" \
   --hadoop-fs-default "$HADOOP_FS_DEFAULT" \
   --hadoop-framework-name "$HADOOP_FRAMEWORK_NAME" \
-  --hadoop-yarn-rm "$HADOOP_YARN_RM"
+  --hadoop-yarn-rm "$HADOOP_YARN_RM" \
+  --hadoop-enable-node-labels "$HADOOP_ENABLE_NODE_LABELS"
 
 echo "Benchmark outputs:"
 echo "  $WORKSPACE/comparison.md"
@@ -213,6 +215,8 @@ if [[ "$EXECUTOR" == "hadoop" ]]; then
   echo "  $HDFS_BASE_WORK_ROOT"
   echo "Hadoop conf dir:"
   echo "  $HADOOP_CONF_DIR"
+  echo "Hadoop node labels:"
+  echo "  $HADOOP_ENABLE_NODE_LABELS"
 fi
 if [[ "$MAX_NODES" != "0" ]]; then
   echo "Node limit:"

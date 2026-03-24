@@ -29,7 +29,7 @@ public final class HadoopJobRunner {
         HadoopTaskInputs inputs = workflowSpec.resolveHadoopInputs(jobId, hadoopSupport.normalizedDataRoot(), hdfsRunRoot);
         Path localOutputDirectory = localRunRoot.resolve("jobs").resolve(jobId);
         String hdfsOutputPath = workflowSpec.hadoopOutputPath(jobId, inputs.outputDirectory());
-        return submit(workflowSpec, jobId, nodeProfile, inputs, localOutputDirectory, hdfsOutputPath, hdfsRunRoot);
+        return submit(workflowSpec, jobId, nodeProfile, inputs, localOutputDirectory, hdfsOutputPath, hdfsRunRoot, nodeProfile.clusterId());
     }
 
     public TaskResult executeTrainingJob(
@@ -41,7 +41,7 @@ public final class HadoopJobRunner {
         Path localOutputDirectory = localDataRoot.resolve("training/generated").resolve(jobId);
         String hdfsOutputPath = workflowSpec.hadoopTrainingOutputPath(hadoopSupport.normalizedDataRoot(), jobId);
         return submit(workflowSpec, jobId, nodeProfile, inputs, localOutputDirectory, hdfsOutputPath,
-                hadoopSupport.normalizedWorkspaceRoot() + "/training");
+                hadoopSupport.normalizedWorkspaceRoot() + "/training", nodeProfile.clusterId());
     }
 
     private TaskResult submit(
@@ -51,7 +51,8 @@ public final class HadoopJobRunner {
             HadoopTaskInputs inputs,
             Path localOutputDirectory,
             String hdfsOutputPath,
-            String hdfsControlRoot) throws Exception {
+            String hdfsControlRoot,
+            String nodeLabelExpression) throws Exception {
         Files.createDirectories(localOutputDirectory);
         hadoopSupport.deleteIfExists(inputs.outputDirectory(), true);
         String controlPath = hdfsControlRoot + "/_control/" + jobId + "-" + UUID.randomUUID() + ".txt";
@@ -60,6 +61,10 @@ public final class HadoopJobRunner {
             Configuration configuration = hadoopSupport.configuration();
             configuration.setInt("mapreduce.map.memory.mb", Math.max(512, nodeProfile.memoryMb()));
             configuration.setInt("mapreduce.map.cpu.vcores", Math.max(1, nodeProfile.cpuThreads()));
+            if (hadoopSupport.enableNodeLabels() && nodeLabelExpression != null && !nodeLabelExpression.isBlank()) {
+                configuration.set("mapreduce.job.node-label-expression", nodeLabelExpression);
+                configuration.set("yarn.app.mapreduce.am.node-label-expression", nodeLabelExpression);
+            }
             HadoopTaskJob.configureTask(
                     configuration,
                     workflowSpec,
