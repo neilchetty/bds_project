@@ -7,6 +7,7 @@ OUTPUT_DIR="${2:-$ROOT_DIR/work/hadoop-paper-cluster}"
 MAX_NODES="${MAX_NODES:-0}"
 IMAGE_TAG="${IMAGE_TAG:-gene2life-hadoop-cluster:3.4.3}"
 MASTER_SERVICE="${MASTER_SERVICE:-master}"
+CLIENT_USER="${CLIENT_USER:-$(id -un)}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -147,6 +148,10 @@ cat > "$CLIENT_CONF_DIR/mapred-site.xml" <<EOF
     <name>mapreduce.framework.name</name>
     <value>yarn</value>
   </property>
+  <property>
+    <name>mapreduce.jobtracker.staging.root.dir</name>
+    <value>/user/${CLIENT_USER}/.staging</value>
+  </property>
 </configuration>
 EOF
 
@@ -192,7 +197,7 @@ ${LABELS}
 EOF
 
 cat > "$OUTPUT_DIR/node-mapping.txt" <<EOF
-$(awk -F, '{printf "%s=%s%s", $2, $1, (NR == 1 ? "" : " ")}' "$SELECTED_CSV")
+$(awk -F, '{printf "%s%s=%s", (NR == 1 ? "" : " "), $2, $1}' "$SELECTED_CSV")
 EOF
 
 echo "Generated Hadoop paper cluster files under $OUTPUT_DIR"
