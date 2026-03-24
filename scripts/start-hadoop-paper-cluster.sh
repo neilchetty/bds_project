@@ -34,7 +34,7 @@ expected_nodes="$(wc -l < "$OUTPUT_DIR/selected-nodes.csv" | tr -d ' ')"
 client_user="$(id -un)"
 ready_yarn=false
 for _ in $(seq 1 90); do
-  listed="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "yarn node -list 2>/dev/null | awk '/Total Nodes:/ {print \$3}'" | tr -d '\r' | tail -1)"
+  listed="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "yarn node -list 2>/dev/null | sed -n 's/^Total Nodes:[[:space:]]*//p' | tail -1" | tr -d '\r')"
   if [[ "${listed:-0}" == "$expected_nodes" ]]; then
     ready_yarn=true
     break
@@ -43,6 +43,8 @@ for _ in $(seq 1 90); do
 done
 if [[ "$ready_yarn" != "true" ]]; then
   echo "YARN did not register the expected $expected_nodes workers for cluster under $OUTPUT_DIR" >&2
+  docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "yarn node -list || true" >&2 || true
+  docker compose -f "$OUTPUT_DIR/docker-compose.yml" ps >&2 || true
   exit 1
 fi
 
