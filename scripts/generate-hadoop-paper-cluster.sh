@@ -159,6 +159,10 @@ cat > "$CLIENT_CONF_DIR/mapred-site.xml" <<EOF
     <value>/user/${CLIENT_USER}/.staging</value>
   </property>
   <property>
+    <name>yarn.app.mapreduce.am.staging-dir</name>
+    <value>/user/${CLIENT_USER}/.staging</value>
+  </property>
+  <property>
     <name>mapreduce.application.classpath</name>
     <value>\$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*:\$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*</value>
   </property>

@@ -163,7 +163,9 @@ public final class HadoopSupport {
             configuration.set("mapreduce.framework.name", executionConfig.frameworkName());
         }
         String currentUser = System.getProperty("user.name", "gene2life");
+        String userStagingDir = "/user/" + currentUser + "/.staging";
         configuration.setIfUnset("mapreduce.jobtracker.staging.root.dir", "/user/" + currentUser + "/.staging");
+        configuration.setIfUnset("yarn.app.mapreduce.am.staging-dir", userStagingDir);
         if (executionConfig.yarnResourceManagerAddress() != null && !executionConfig.yarnResourceManagerAddress().isBlank()) {
             configuration.set("yarn.resourcemanager.address", executionConfig.yarnResourceManagerAddress());
         }
