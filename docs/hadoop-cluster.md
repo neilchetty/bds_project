@@ -47,6 +47,11 @@ This creates:
 - `client-conf/`
 - `cluster.env`
 
+The generated host-side Hadoop client config now points at one routable endpoint host so that:
+
+- the Linux host can submit jobs to HDFS/YARN
+- the YARN ApplicationMaster and task containers can reuse the same config without trying to connect to `localhost` inside worker containers
+
 `start-hadoop-paper-cluster.sh` now waits for:
 
 - master HDFS readiness

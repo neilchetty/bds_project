@@ -8,6 +8,16 @@ MAX_NODES="${MAX_NODES:-0}"
 IMAGE_TAG="${IMAGE_TAG:-gene2life-hadoop-cluster:3.4.3}"
 MASTER_SERVICE="${MASTER_SERVICE:-master}"
 CLIENT_USER="${CLIENT_USER:-$(id -un)}"
+CLIENT_ENDPOINT_HOST="${CLIENT_ENDPOINT_HOST:-}"
+
+if [[ -z "$CLIENT_ENDPOINT_HOST" ]]; then
+  if command -v hostname >/dev/null 2>&1; then
+    CLIENT_ENDPOINT_HOST="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+fi
+if [[ -z "$CLIENT_ENDPOINT_HOST" ]]; then
+  CLIENT_ENDPOINT_HOST="127.0.0.1"
+fi
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -126,7 +136,7 @@ cat > "$CLIENT_CONF_DIR/core-site.xml" <<EOF
 <configuration>
   <property>
     <name>fs.defaultFS</name>
-    <value>hdfs://localhost:9000</value>
+    <value>hdfs://${CLIENT_ENDPOINT_HOST}:9000</value>
   </property>
 </configuration>
 EOF
@@ -135,7 +145,7 @@ cat > "$CLIENT_CONF_DIR/hdfs-site.xml" <<EOF
 <configuration>
   <property>
     <name>dfs.namenode.rpc-address</name>
-    <value>localhost:9000</value>
+    <value>${CLIENT_ENDPOINT_HOST}:9000</value>
   </property>
   <property>
     <name>dfs.client.use.datanode.hostname</name>
@@ -173,23 +183,23 @@ cat > "$CLIENT_CONF_DIR/yarn-site.xml" <<EOF
 <configuration>
   <property>
     <name>yarn.resourcemanager.hostname</name>
-    <value>localhost</value>
+    <value>${CLIENT_ENDPOINT_HOST}</value>
   </property>
   <property>
     <name>yarn.resourcemanager.address</name>
-    <value>localhost:8032</value>
+    <value>${CLIENT_ENDPOINT_HOST}:8032</value>
   </property>
   <property>
     <name>yarn.resourcemanager.scheduler.address</name>
-    <value>localhost:8030</value>
+    <value>${CLIENT_ENDPOINT_HOST}:8030</value>
   </property>
   <property>
     <name>yarn.resourcemanager.resource-tracker.address</name>
-    <value>localhost:8031</value>
+    <value>${CLIENT_ENDPOINT_HOST}:8031</value>
   </property>
   <property>
     <name>yarn.resourcemanager.admin.address</name>
-    <value>localhost:8033</value>
+    <value>${CLIENT_ENDPOINT_HOST}:8033</value>
   </property>
   <property>
     <name>yarn.scheduler.minimum-allocation-mb</name>
@@ -208,11 +218,12 @@ EOF
 
 cat > "$OUTPUT_DIR/cluster.env" <<EOF
 export HADOOP_CONF_DIR=${CLIENT_CONF_DIR}
-export HADOOP_FS_DEFAULT=hdfs://localhost:9000
-export HADOOP_YARN_RM=localhost:8032
+export HADOOP_FS_DEFAULT=hdfs://${CLIENT_ENDPOINT_HOST}:9000
+export HADOOP_YARN_RM=${CLIENT_ENDPOINT_HOST}:8032
 export HADOOP_FRAMEWORK_NAME=yarn
 export HADOOP_ENABLE_NODE_LABELS=true
 export GENE2LIFE_HADOOP_CLUSTER_DIR=${OUTPUT_DIR}
+export GENE2LIFE_HADOOP_CLIENT_ENDPOINT_HOST=${CLIENT_ENDPOINT_HOST}
 EOF
 
 cat > "$OUTPUT_DIR/node-labels.txt" <<EOF
@@ -226,4 +237,5 @@ EOF
 echo "Generated Hadoop paper cluster files under $OUTPUT_DIR"
 echo "Compose file: $COMPOSE_FILE"
 echo "Client Hadoop conf: $CLIENT_CONF_DIR"
+echo "Client endpoint host: $CLIENT_ENDPOINT_HOST"
 echo "Selected worker count: $NODE_COUNT"
