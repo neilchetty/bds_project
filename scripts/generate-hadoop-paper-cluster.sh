@@ -73,7 +73,6 @@ services:
   ${MASTER_SERVICE}:
     image: ${IMAGE_TAG}
     hostname: ${MASTER_SERVICE}
-    container_name: gene2life-hadoop-master
     environment:
       ROLE: master
       MASTER_HOST: ${MASTER_SERVICE}
@@ -100,7 +99,6 @@ while IFS=, read -r cluster_id node_id cpu_threads io_buffer_kb memory_mb cpu_se
   ${node_id}:
     image: ${IMAGE_TAG}
     hostname: ${node_id}
-    container_name: gene2life-${node_id}
     environment:
       ROLE: worker
       MASTER_HOST: ${MASTER_SERVICE}
