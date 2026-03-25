@@ -200,6 +200,7 @@ For the closest paper-style setup on one physical server, use the multi-worker H
 The recommended path is now:
 
 - start a multi-worker Hadoop cluster on the Linux server, not on the Mac Mini
+- validate that all expected `DataNode`s and `NodeManager`s actually joined before running the Java workloads
 - let the scheduler see the same heterogeneous subclusters described in the paper
 - run each node-count experiment against a cluster that exposes only that many worker nodes
 

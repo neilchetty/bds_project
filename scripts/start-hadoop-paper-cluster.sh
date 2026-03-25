@@ -32,6 +32,22 @@ fi
 
 expected_nodes="$(wc -l < "$OUTPUT_DIR/selected-nodes.csv" | tr -d ' ')"
 client_user="$(id -un)"
+ready_datanodes=false
+for _ in $(seq 1 90); do
+  live_datanodes="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfsadmin -report 2>/dev/null | sed -n 's/^Live datanodes ([[:space:]]*\\([0-9][0-9]*\\)).*/\\1/p' | tail -1" | tr -dc '0-9')"
+  if [[ "${live_datanodes:-0}" == "$expected_nodes" ]]; then
+    ready_datanodes=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$ready_datanodes" != "true" ]]; then
+  echo "HDFS did not register the expected $expected_nodes live DataNodes for cluster under $OUTPUT_DIR" >&2
+  docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfsadmin -report || true" >&2 || true
+  docker compose -f "$OUTPUT_DIR/docker-compose.yml" ps >&2 || true
+  exit 1
+fi
+
 ready_yarn=false
 for _ in $(seq 1 90); do
   listed="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "yarn node -list 2>/dev/null | sed -n 's/^Total Nodes:[[:space:]]*//p' | tail -1" | tr -d '\r')"
@@ -82,5 +98,7 @@ echo "Worker count:"
 echo "  $expected_nodes"
 echo "Total container count (master + workers):"
 echo "  $((expected_nodes + 1))"
+echo "Validation command:"
+echo "  OUTPUT_DIR=$OUTPUT_DIR $ROOT_DIR/scripts/validate-hadoop-paper-cluster.sh"
 echo "Node mappings:"
 echo "  $mapping"

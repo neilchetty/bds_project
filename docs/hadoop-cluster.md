@@ -32,7 +32,7 @@ The new orchestration script handles that mapping automatically.
 ## Build And Start
 
 ```bash
-chmod +x ./scripts/build-hadoop-cluster-image.sh ./scripts/generate-hadoop-paper-cluster.sh ./scripts/start-hadoop-paper-cluster.sh ./scripts/stop-hadoop-paper-cluster.sh ./scripts/run-paper-hadoop-sweeps.sh
+chmod +x ./scripts/build-hadoop-cluster-image.sh ./scripts/generate-hadoop-paper-cluster.sh ./scripts/start-hadoop-paper-cluster.sh ./scripts/stop-hadoop-paper-cluster.sh ./scripts/validate-hadoop-paper-cluster.sh ./scripts/run-paper-hadoop-sweeps.sh
 
 MAX_NODES=12 \
 CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
@@ -47,7 +47,23 @@ This creates:
 - `client-conf/`
 - `cluster.env`
 
-`start-hadoop-paper-cluster.sh` now waits for HDFS and YARN readiness, creates the project HDFS roots, and applies node labels for the modeled subclusters.
+`start-hadoop-paper-cluster.sh` now waits for:
+
+- master HDFS readiness
+- all expected HDFS `DataNode`s to register
+- all expected YARN `NodeManager`s to register
+- HDFS safe mode to turn off
+
+It then creates the project HDFS roots and applies node labels for the modeled subclusters.
+
+Validate the cluster before running the benchmark:
+
+```bash
+OUTPUT_DIR=/home/cse-sdpl/bds_project/work/hadoop-paper-cluster \
+./scripts/validate-hadoop-paper-cluster.sh
+```
+
+This is the fast way to catch the exact failure mode you described: containers exist, but `DataNode` or `NodeManager` processes did not actually join the cluster.
 
 ## Run The Project Against The Cluster
 
@@ -77,6 +93,11 @@ HDFS_BASE_WORK_ROOT=/gene2life/work \
 - `HADOOP_YARN_RM`
 - `HADOOP_FRAMEWORK_NAME=yarn`
 - `HADOOP_ENABLE_NODE_LABELS=true`
+- `GENE2LIFE_HADOOP_CLUSTER_DIR`
+
+## Important Platform Note
+
+Use this path on the HP Ubuntu server, not the Mac Mini. The project can be edited on macOS, but the Hadoop paper-cluster path is designed for Docker-on-Linux so the host can reach HDFS and YARN consistently during benchmark runs.
 
 ## Recommended Sweep
 

@@ -4,6 +4,11 @@ set -euo pipefail
 export JAVA_HOME="${JAVA_HOME:-/opt/java/openjdk}"
 export HADOOP_HOME="${HADOOP_HOME:-/opt/hadoop}"
 export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/etc/hadoop}"
+export HADOOP_COMMON_HOME="${HADOOP_COMMON_HOME:-$HADOOP_HOME}"
+export HADOOP_HDFS_HOME="${HADOOP_HDFS_HOME:-$HADOOP_HOME}"
+export HADOOP_MAPRED_HOME="${HADOOP_MAPRED_HOME:-$HADOOP_HOME}"
+export HADOOP_YARN_HOME="${HADOOP_YARN_HOME:-$HADOOP_HOME}"
+export YARN_HOME="${YARN_HOME:-$HADOOP_HOME}"
 export PATH="$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$JAVA_HOME/bin:$PATH"
 
 ROLE="${ROLE:?ROLE must be set to master or worker}"
@@ -18,6 +23,19 @@ NODE_MEMORY_MB="${NODE_MEMORY_MB:-2048}"
 NODE_CPU_VCORES="${NODE_CPU_VCORES:-2}"
 NODE_LABELS_STORE_DIR="${NODE_LABELS_STORE_DIR:-file:///data/yarn/node-labels}"
 WORKER_LIST_FILE="$HADOOP_CONF_DIR/workers"
+NODEMANAGER_LOCAL_DIR="${DATA_ROOT}/yarn/local"
+NODEMANAGER_LOG_DIR="${DATA_ROOT}/yarn/logs"
+
+append_or_replace_env() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if grep -q "^export ${key}=" "$file"; then
+    sed -i "s|^export ${key}=.*|export ${key}=${value}|" "$file"
+  else
+    echo "export ${key}=${value}" >> "$file"
+  fi
+}
 
 render_config() {
   cat > "$HADOOP_CONF_DIR/core-site.xml" <<EOF
@@ -44,11 +62,43 @@ EOF
     <value>file://${DATA_ROOT}/hdfs/namenode</value>
   </property>
   <property>
+    <name>dfs.namenode.rpc-bind-host</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>${MASTER_HOST}:9870</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-bind-host</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
     <name>dfs.datanode.data.dir</name>
     <value>file://${DATA_ROOT}/hdfs/datanode</value>
   </property>
   <property>
+    <name>dfs.datanode.address</name>
+    <value>0.0.0.0:9866</value>
+  </property>
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>0.0.0.0:9864</value>
+  </property>
+  <property>
+    <name>dfs.datanode.ipc.address</name>
+    <value>0.0.0.0:9867</value>
+  </property>
+  <property>
     <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>dfs.client.use.datanode.hostname</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>dfs.datanode.use.datanode.hostname</name>
     <value>false</value>
   </property>
   <property>
@@ -71,6 +121,18 @@ EOF
   <property>
     <name>mapreduce.application.classpath</name>
     <value>\$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*:\$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*</value>
+  </property>
+  <property>
+    <name>yarn.app.mapreduce.am.env</name>
+    <value>JAVA_HOME=${JAVA_HOME},HADOOP_HOME=${HADOOP_HOME},HADOOP_MAPRED_HOME=${HADOOP_MAPRED_HOME},HADOOP_COMMON_HOME=${HADOOP_COMMON_HOME},HADOOP_HDFS_HOME=${HADOOP_HDFS_HOME},HADOOP_YARN_HOME=${HADOOP_YARN_HOME}</value>
+  </property>
+  <property>
+    <name>mapreduce.map.env</name>
+    <value>JAVA_HOME=${JAVA_HOME},HADOOP_HOME=${HADOOP_HOME},HADOOP_MAPRED_HOME=${HADOOP_MAPRED_HOME},HADOOP_COMMON_HOME=${HADOOP_COMMON_HOME},HADOOP_HDFS_HOME=${HADOOP_HDFS_HOME},HADOOP_YARN_HOME=${HADOOP_YARN_HOME}</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.env</name>
+    <value>JAVA_HOME=${JAVA_HOME},HADOOP_HOME=${HADOOP_HOME},HADOOP_MAPRED_HOME=${HADOOP_MAPRED_HOME},HADOOP_COMMON_HOME=${HADOOP_COMMON_HOME},HADOOP_HDFS_HOME=${HADOOP_HDFS_HOME},HADOOP_YARN_HOME=${HADOOP_YARN_HOME}</value>
   </property>
 </configuration>
 EOF
@@ -148,6 +210,14 @@ EOF
     <value>mapreduce_shuffle</value>
   </property>
   <property>
+    <name>yarn.nodemanager.local-dirs</name>
+    <value>${NODEMANAGER_LOCAL_DIR}</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.log-dirs</name>
+    <value>${NODEMANAGER_LOG_DIR}</value>
+  </property>
+  <property>
     <name>yarn.nodemanager.resource.memory-mb</name>
     <value>${NODE_MEMORY_MB}</value>
   </property>
@@ -162,6 +232,22 @@ EOF
   <property>
     <name>yarn.scheduler.maximum-allocation-vcores</name>
     <value>${YARN_MAX_VCORES}</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.minimum-allocation-mb</name>
+    <value>256</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.minimum-allocation-vcores</name>
+    <value>1</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.pmem-check-enabled</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>yarn.nodemanager.vmem-check-enabled</name>
+    <value>false</value>
   </property>
   <property>
     <name>yarn.node-labels.enabled</name>
@@ -179,16 +265,30 @@ EOF
 EOF
 
   printf '%s\n' "${WORKER_HOSTS}" | tr ',' '\n' > "$WORKER_LIST_FILE"
-  if grep -q '^export JAVA_HOME=' "$HADOOP_CONF_DIR/hadoop-env.sh"; then
-    sed -i "s|^export JAVA_HOME=.*|export JAVA_HOME=${JAVA_HOME}|" "$HADOOP_CONF_DIR/hadoop-env.sh"
-  else
-    echo "export JAVA_HOME=${JAVA_HOME}" >> "$HADOOP_CONF_DIR/hadoop-env.sh"
-  fi
-  grep -q '^export JAVA_HOME=' "$HADOOP_CONF_DIR/yarn-env.sh" || echo "export JAVA_HOME=${JAVA_HOME}" >> "$HADOOP_CONF_DIR/yarn-env.sh"
-  grep -q '^export JAVA_HOME=' "$HADOOP_CONF_DIR/mapred-env.sh" || echo "export JAVA_HOME=${JAVA_HOME}" >> "$HADOOP_CONF_DIR/mapred-env.sh"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "JAVA_HOME" "${JAVA_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "HADOOP_HOME" "${HADOOP_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "HADOOP_COMMON_HOME" "${HADOOP_COMMON_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "HADOOP_HDFS_HOME" "${HADOOP_HDFS_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "HADOOP_MAPRED_HOME" "${HADOOP_MAPRED_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "HADOOP_YARN_HOME" "${HADOOP_YARN_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/hadoop-env.sh" "YARN_HOME" "${YARN_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "JAVA_HOME" "${JAVA_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "HADOOP_HOME" "${HADOOP_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "HADOOP_COMMON_HOME" "${HADOOP_COMMON_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "HADOOP_HDFS_HOME" "${HADOOP_HDFS_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "HADOOP_MAPRED_HOME" "${HADOOP_MAPRED_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "HADOOP_YARN_HOME" "${HADOOP_YARN_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/yarn-env.sh" "YARN_HOME" "${YARN_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "JAVA_HOME" "${JAVA_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "HADOOP_HOME" "${HADOOP_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "HADOOP_COMMON_HOME" "${HADOOP_COMMON_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "HADOOP_HDFS_HOME" "${HADOOP_HDFS_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "HADOOP_MAPRED_HOME" "${HADOOP_MAPRED_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "HADOOP_YARN_HOME" "${HADOOP_YARN_HOME}"
+  append_or_replace_env "$HADOOP_CONF_DIR/mapred-env.sh" "YARN_HOME" "${YARN_HOME}"
 }
 
-mkdir -p "${DATA_ROOT}/tmp" "${DATA_ROOT}/hdfs/namenode" "${DATA_ROOT}/hdfs/datanode" "${DATA_ROOT}/yarn/node-labels"
+mkdir -p "${DATA_ROOT}/tmp" "${DATA_ROOT}/hdfs/namenode" "${DATA_ROOT}/hdfs/datanode" "${DATA_ROOT}/yarn/node-labels" "${NODEMANAGER_LOCAL_DIR}" "${NODEMANAGER_LOG_DIR}"
 render_config
 
 if [[ "$ROLE" == "master" ]]; then

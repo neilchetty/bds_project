@@ -139,6 +139,14 @@ cat > "$CLIENT_CONF_DIR/hdfs-site.xml" <<EOF
     <name>dfs.namenode.rpc-address</name>
     <value>localhost:9000</value>
   </property>
+  <property>
+    <name>dfs.client.use.datanode.hostname</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>dfs.datanode.use.datanode.hostname</name>
+    <value>false</value>
+  </property>
 </configuration>
 EOF
 
@@ -151,6 +159,10 @@ cat > "$CLIENT_CONF_DIR/mapred-site.xml" <<EOF
   <property>
     <name>mapreduce.jobtracker.staging.root.dir</name>
     <value>/user/${CLIENT_USER}/.staging</value>
+  </property>
+  <property>
+    <name>mapreduce.application.classpath</name>
+    <value>\$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*:\$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*</value>
   </property>
 </configuration>
 EOF
@@ -178,6 +190,14 @@ cat > "$CLIENT_CONF_DIR/yarn-site.xml" <<EOF
     <value>localhost:8033</value>
   </property>
   <property>
+    <name>yarn.scheduler.minimum-allocation-mb</name>
+    <value>256</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.minimum-allocation-vcores</name>
+    <value>1</value>
+  </property>
+  <property>
     <name>yarn.node-labels.enabled</name>
     <value>true</value>
   </property>
@@ -190,6 +210,7 @@ export HADOOP_FS_DEFAULT=hdfs://localhost:9000
 export HADOOP_YARN_RM=localhost:8032
 export HADOOP_FRAMEWORK_NAME=yarn
 export HADOOP_ENABLE_NODE_LABELS=true
+export GENE2LIFE_HADOOP_CLUSTER_DIR=${OUTPUT_DIR}
 EOF
 
 cat > "$OUTPUT_DIR/node-labels.txt" <<EOF
