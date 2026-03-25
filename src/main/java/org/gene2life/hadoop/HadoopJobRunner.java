@@ -1,12 +1,15 @@
 package org.gene2life.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapreduce.TaskCompletionEvent;
 import org.gene2life.model.NodeProfile;
 import org.gene2life.task.TaskResult;
 import org.gene2life.workflow.WorkflowSpec;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public final class HadoopJobRunner {
@@ -75,7 +78,7 @@ public final class HadoopJobRunner {
                     workflowSpec.outputDescription(jobId));
             var job = HadoopTaskJob.createJob(configuration, workflowSpec.workflowId() + "-" + jobId + "-" + nodeProfile.nodeId(), controlPath);
             if (!job.waitForCompletion(true)) {
-                throw new IllegalStateException("Hadoop job failed for " + workflowSpec.workflowId() + "/" + jobId);
+                throw new IllegalStateException(buildFailureMessage(workflowSpec, jobId, nodeProfile, job));
             }
             Path localOutputPath = workflowSpec.outputPath(jobId, localOutputDirectory);
             hadoopSupport.copyHdfsFileToLocal(hdfsOutputPath, localOutputPath);
@@ -83,5 +86,61 @@ public final class HadoopJobRunner {
         } finally {
             hadoopSupport.deleteIfExists(controlPath, false);
         }
+    }
+
+    private static String buildFailureMessage(
+            WorkflowSpec workflowSpec,
+            String jobId,
+            NodeProfile nodeProfile,
+            org.apache.hadoop.mapreduce.Job job) {
+        StringBuilder message = new StringBuilder("Hadoop job failed for ")
+                .append(workflowSpec.workflowId())
+                .append("/")
+                .append(jobId)
+                .append(" on ")
+                .append(nodeProfile.nodeId());
+        try {
+            message.append(" [trackingUrl=").append(job.getTrackingURL()).append("]");
+        } catch (Exception ignored) {
+        }
+        try {
+            var status = job.getStatus();
+            if (status != null) {
+                message.append(" [state=").append(status.getState()).append("]");
+                if (status.getFailureInfo() != null && !status.getFailureInfo().isBlank()) {
+                    message.append(System.lineSeparator())
+                            .append("Failure info: ")
+                            .append(status.getFailureInfo());
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        List<String> diagnostics = new ArrayList<>();
+        try {
+            for (TaskCompletionEvent event : job.getTaskCompletionEvents(0, 16)) {
+                String eventStatus = event.getStatus().name();
+                if (!(eventStatus.contains("FAIL") || eventStatus.contains("KILL"))) {
+                    continue;
+                }
+                diagnostics.add("Attempt " + event.getTaskAttemptId() + " status=" + eventStatus);
+                String[] taskDiagnostics = job.getTaskDiagnostics(event.getTaskAttemptId());
+                for (String diagnostic : taskDiagnostics) {
+                    if (diagnostic != null && !diagnostic.isBlank()) {
+                        diagnostics.add(diagnostic.trim());
+                    }
+                }
+                if (diagnostics.size() >= 6) {
+                    break;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (!diagnostics.isEmpty()) {
+            message.append(System.lineSeparator()).append("Diagnostics:");
+            for (String diagnostic : diagnostics) {
+                message.append(System.lineSeparator()).append(" - ").append(diagnostic);
+            }
+        }
+        return message.toString();
     }
 }

@@ -11,6 +11,7 @@ if [[ ! -f "$OUTPUT_DIR/docker-compose.yml" ]]; then
 fi
 
 expected_nodes="$(wc -l < "$OUTPUT_DIR/selected-nodes.csv" | tr -d ' ')"
+client_user="$(id -un)"
 
 echo "Compose services:"
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" ps
@@ -38,6 +39,12 @@ docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bas
 
 registered_nodes="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "yarn node -list 2>/dev/null | sed -n 's/^Total Nodes:[[:space:]]*//p' | tail -1" | tr -d '\r[:space:]')"
 
+echo
+echo "HDFS staging directory:"
+docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -ls -d /user /user/${client_user} /user/${client_user}/.staging"
+
+staging_owner="$(docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -stat '%u' /user/${client_user}/.staging 2>/dev/null" | tr -d '\r[:space:]')"
+
 if [[ "${live_datanodes:-0}" != "$expected_nodes" ]]; then
   echo "Expected $expected_nodes live DataNodes but found ${live_datanodes:-0}" >&2
   exit 1
@@ -45,6 +52,11 @@ fi
 
 if [[ "${registered_nodes:-0}" != "$expected_nodes" ]]; then
   echo "Expected $expected_nodes YARN NodeManagers but found ${registered_nodes:-0}" >&2
+  exit 1
+fi
+
+if [[ "${staging_owner:-}" != "$client_user" ]]; then
+  echo "Expected /user/${client_user}/.staging to be owned by ${client_user} but found ${staging_owner:-unknown}" >&2
   exit 1
 fi
 

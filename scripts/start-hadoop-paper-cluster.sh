@@ -81,6 +81,8 @@ fi
 
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -mkdir -p /gene2life /gene2life/data /gene2life/work /user/${client_user} /user/${client_user}/.staging >/dev/null 2>&1 || true"
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chmod 1777 /gene2life /gene2life/data /gene2life/work >/dev/null 2>&1 || true"
+docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chmod 755 /user >/dev/null 2>&1 || true"
+docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chown ${client_user} /user/${client_user} /user/${client_user}/.staging >/dev/null 2>&1 || true"
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chmod 700 /user/${client_user} >/dev/null 2>&1 || true"
 docker compose -f "$OUTPUT_DIR/docker-compose.yml" exec -T "$MASTER_SERVICE" bash -lc "hdfs dfs -chmod 700 /user/${client_user}/.staging >/dev/null 2>&1 || true"
 
