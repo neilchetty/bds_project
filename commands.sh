@@ -46,12 +46,16 @@ log() {
   printf '[%s] %s\n' "$(timestamp)" "$*"
 }
 
+LAST_COMMAND=""
+
 run_cmd() {
+  LAST_COMMAND="$*"
   log "COMMAND: $*"
   "$@"
 }
 
 run_shell() {
+  LAST_COMMAND="$*"
   log "COMMAND: $*"
   bash -lc "$*"
 }
@@ -84,6 +88,7 @@ render_report() {
     echo "GENE2LIFE_JAVA_OPTS=$GENE2LIFE_JAVA_OPTS"
     echo "START_TS=$RUN_TS"
     echo "END_TS=$end_ts"
+    echo "LAST_COMMAND=$LAST_COMMAND"
   } > "$ENV_SNAPSHOT"
 
   python3 - "$SESSION_DIR" "$BASE_WORK_DIR" "$TRANSCRIPT" "$REPORT_HTML" "$RESULT_SUMMARY" "$status" "$RUN_TS" "$end_ts" <<'PY'
@@ -235,18 +240,23 @@ main() {
   log "Overnight run completed successfully"
 }
 
-status="SUCCESS"
-end_ts=""
-if ! main; then
-  status="FAILED"
-fi
-end_ts="$(date '+%F %T')"
-cleanup_runtime
-render_report "$status" "$end_ts"
-log "HTML report: $REPORT_HTML"
-log "PDF report: $REPORT_PDF"
-log "Transcript: $TRANSCRIPT"
-log "Result summary: $RESULT_SUMMARY"
-if [[ "$status" != "SUCCESS" ]]; then
-  exit 1
-fi
+finish() {
+  local exit_code="$?"
+  local status="SUCCESS"
+  if [[ "$exit_code" -ne 0 ]]; then
+    status="FAILED"
+    log "Run failed while executing: ${LAST_COMMAND:-unknown command}"
+  fi
+  end_ts="$(date '+%F %T')"
+  cleanup_runtime
+  render_report "$status" "$end_ts"
+  log "HTML report: $REPORT_HTML"
+  log "PDF report: $REPORT_PDF"
+  log "Transcript: $TRANSCRIPT"
+  log "Result summary: $RESULT_SUMMARY"
+  exit "$exit_code"
+}
+
+trap finish EXIT
+
+main

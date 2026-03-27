@@ -126,6 +126,12 @@ public final class Main {
                 : null;
         HadoopJobRunner hadoopJobRunner = null;
         if (hadoopExecutionConfig != null) {
+            System.out.println("Hadoop execution config:"
+                    + " confDir=" + hadoopExecutionConfig.hadoopConfDir()
+                    + " fsDefault=" + hadoopExecutionConfig.fsDefaultFs()
+                    + " yarnRm=" + hadoopExecutionConfig.yarnResourceManagerAddress()
+                    + " dataRoot=" + hadoopExecutionConfig.normalizedDataRoot()
+                    + " workspaceRoot=" + hadoopExecutionConfig.normalizedWorkspaceRoot());
             hadoopJobRunner = new HadoopJobRunner(new HadoopSupport(hadoopExecutionConfig));
             hadoopJobRunner.syncDataRoot(dataRoot);
         }
