@@ -314,6 +314,7 @@ if [[ "$ROLE" == "master" ]]; then
   hdfs --daemon start namenode
   hdfs --daemon start secondarynamenode
   yarn --daemon start resourcemanager
+  yarn --daemon start nodemanager
 else
   for _ in $(seq 1 60); do
     if nc -z "$MASTER_HOST" 9000 >/dev/null 2>&1 && nc -z "$MASTER_HOST" 8032 >/dev/null 2>&1; then

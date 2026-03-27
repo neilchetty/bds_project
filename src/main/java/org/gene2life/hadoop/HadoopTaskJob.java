@@ -2,6 +2,7 @@ package org.gene2life.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -111,12 +112,7 @@ public final class HadoopTaskJob {
                     int inputCount = configuration.getInt(CONF_INPUT_COUNT, 0);
                     for (int index = 0; index < inputCount; index++) {
                         Path source = new Path(configuration.get(inputKey(index)));
-                        String fileName = source.getName();
-                        if (fileName == null || fileName.isBlank()) {
-                            fileName = "input-" + index;
-                        }
-                        java.nio.file.Path localPath = workDir.resolve(index + "-" + fileName);
-                        fileSystem.copyToLocalFile(false, source, new Path(localPath.toAbsolutePath().toString()), true);
+                        java.nio.file.Path localPath = localizeInput(fileSystem, source, workDir.resolve("input-" + index));
                         localInputs.add(localPath);
                     }
                     java.nio.file.Path localOutputDir = workDir.resolve("output");
@@ -128,11 +124,13 @@ public final class HadoopTaskJob {
                     }
                     TaskResult result = executor.execute(taskInputs, nodeProfile);
                     Path hdfsOutputPath = new Path(configuration.get(CONF_OUTPUT_PATH));
-                    Path parent = hdfsOutputPath.getParent();
-                    if (parent != null) {
-                        fileSystem.mkdirs(parent);
+                    Path outputDirectory = hdfsOutputPath.getParent();
+                    if (outputDirectory == null) {
+                        throw new IOException("Missing HDFS output directory for " + hdfsOutputPath);
                     }
-                    fileSystem.copyFromLocalFile(false, true, new Path(result.outputPath().toAbsolutePath().toString()), hdfsOutputPath);
+                    fileSystem.delete(outputDirectory, true);
+                    fileSystem.mkdirs(outputDirectory);
+                    copyDirectoryToHdfs(fileSystem, localOutputDir, outputDirectory);
                 }
             } catch (Exception exception) {
                 throw new IOException("Hadoop task execution failed for " + jobId, exception);
@@ -151,6 +149,68 @@ public final class HadoopTaskJob {
                 }
             }
             return Map.copyOf(parameters);
+        }
+
+        private static java.nio.file.Path localizeInput(
+                FileSystem fileSystem,
+                Path source,
+                java.nio.file.Path localRoot) throws IOException {
+            String fileName = source.getName();
+            if (fileName == null || fileName.isBlank()) {
+                fileName = "input";
+            }
+            if (fileName.endsWith(".manifest.tsv")) {
+                Files.createDirectories(localRoot);
+                Path sourceDirectory = source.getParent();
+                if (sourceDirectory == null) {
+                    throw new IOException("Manifest input is missing a parent directory: " + source);
+                }
+                copyDirectoryFromHdfs(fileSystem, sourceDirectory, localRoot);
+                return localRoot.resolve(fileName);
+            }
+            java.nio.file.Path localPath = localRoot.resolve(fileName);
+            Files.createDirectories(localPath.getParent());
+            fileSystem.copyToLocalFile(false, source, new Path(localPath.toAbsolutePath().toString()), true);
+            return localPath;
+        }
+
+        private static void copyDirectoryFromHdfs(
+                FileSystem fileSystem,
+                Path sourceDirectory,
+                java.nio.file.Path localDirectory) throws IOException {
+            for (FileStatus status : fileSystem.listStatus(sourceDirectory)) {
+                java.nio.file.Path destination = localDirectory.resolve(status.getPath().getName());
+                if (status.isDirectory()) {
+                    Files.createDirectories(destination);
+                    copyDirectoryFromHdfs(fileSystem, status.getPath(), destination);
+                } else {
+                    Files.createDirectories(destination.getParent());
+                    fileSystem.copyToLocalFile(false, status.getPath(), new Path(destination.toAbsolutePath().toString()), true);
+                }
+            }
+        }
+
+        private static void copyDirectoryToHdfs(
+                FileSystem fileSystem,
+                java.nio.file.Path localDirectory,
+                Path hdfsDirectory) throws IOException {
+            try (Stream<java.nio.file.Path> stream = Files.walk(localDirectory)) {
+                for (java.nio.file.Path candidate : stream.sorted().toList()) {
+                    java.nio.file.Path relative = localDirectory.relativize(candidate);
+                    Path destination = relative.toString().isBlank()
+                            ? hdfsDirectory
+                            : new Path(hdfsDirectory, relative.toString().replace('\\', '/'));
+                    if (Files.isDirectory(candidate)) {
+                        fileSystem.mkdirs(destination);
+                    } else {
+                        Path parent = destination.getParent();
+                        if (parent != null) {
+                            fileSystem.mkdirs(parent);
+                        }
+                        fileSystem.copyFromLocalFile(false, true, new Path(candidate.toAbsolutePath().toString()), destination);
+                    }
+                }
+            }
         }
 
         private static void deleteRecursively(java.nio.file.Path path) throws IOException {

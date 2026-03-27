@@ -5,18 +5,24 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 PROFILE="${PROFILE:-medium}"
 WORKFLOWS="${WORKFLOWS:-gene2life avianflu_small epigenomics}"
-NODE_COUNTS="${NODE_COUNTS:-4 7 10 12}"
-CLUSTER_CONFIG="${CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.csv}"
+NODE_COUNTS="${NODE_COUNTS:-2 4 12 28}"
+PAPER_CLUSTER_CONFIG="${PAPER_CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.csv}"
+DENSE_CLUSTER_CONFIG="${DENSE_CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-dense-28.csv}"
+CLUSTER_CONFIG="${CLUSTER_CONFIG:-}"
 COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
-EXECUTOR="${EXECUTOR:-docker}"
+EXECUTOR="${EXECUTOR:-hadoop}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
+HADOOP_CLUSTER_IMAGE="${HADOOP_CLUSTER_IMAGE:-gene2life-hadoop-cluster:3.4.3}"
 GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication}"
-BASE_WORK_DIR="${BASE_WORK_DIR:-$ROOT_DIR/work/paper-sweeps}"
-LOG_DIR="${LOG_DIR:-$ROOT_DIR/work/paper-sweep-logs}"
+BASE_WORK_DIR="${BASE_WORK_DIR:-$ROOT_DIR/work/hadoop-overnight-sweeps}"
+LOG_DIR="${LOG_DIR:-$ROOT_DIR/work/hadoop-overnight-logs}"
 DATASET_BASE_DIR="${DATASET_BASE_DIR:-$BASE_WORK_DIR/datasets}"
 REUSE_DATA="${REUSE_DATA:-true}"
+SKIP_PREBUILD="${SKIP_PREBUILD:-false}"
+RUN_ALL_KEEP_CLUSTER="${RUN_ALL_KEEP_CLUSTER:-false}"
+HADOOP_CLUSTER_WORKDIR="${HADOOP_CLUSTER_WORKDIR:-$ROOT_DIR/work/hadoop-docker-cluster}"
 
 mkdir -p "$BASE_WORK_DIR" "$LOG_DIR" "$DATASET_BASE_DIR"
 
@@ -29,6 +35,18 @@ timestamp() {
 log() {
   printf '[%s] %s\n' "$(timestamp)" "$*" | tee -a "$MASTER_LOG"
 }
+
+cleanup_runtime() {
+  if [[ "$EXECUTOR" == "hadoop" && "$RUN_ALL_KEEP_CLUSTER" != "true" ]]; then
+    log "Cleaning up project Docker Hadoop cluster after sweep"
+    HADOOP_CLUSTER_WORKDIR="$HADOOP_CLUSTER_WORKDIR" \
+      HADOOP_CLUSTER_IMAGE="$HADOOP_CLUSTER_IMAGE" \
+      CLUSTER_CONFIG="$PAPER_CLUSTER_CONFIG" \
+      "$ROOT_DIR/scripts/cleanup-project-runtime.sh" hadoop-cluster || true
+  fi
+}
+
+trap cleanup_runtime EXIT
 
 run_with_timestamped_log() {
   local logfile="$1"
@@ -46,18 +64,42 @@ log "Sweep script started"
 log "PROFILE=$PROFILE"
 log "WORKFLOWS=$WORKFLOWS"
 log "NODE_COUNTS=$NODE_COUNTS"
-log "CLUSTER_CONFIG=$CLUSTER_CONFIG"
+log "PAPER_CLUSTER_CONFIG=$PAPER_CLUSTER_CONFIG"
+log "DENSE_CLUSTER_CONFIG=$DENSE_CLUSTER_CONFIG"
 log "EXECUTOR=$EXECUTOR"
 log "COMPARE_ROUNDS=$COMPARE_ROUNDS"
 log "REUSE_DATA=$REUSE_DATA"
+log "BASE_WORK_DIR=$BASE_WORK_DIR"
+log "LOG_DIR=$LOG_DIR"
+log "RUN_ALL_KEEP_CLUSTER=$RUN_ALL_KEEP_CLUSTER"
 
-log "Building classes once before the sweep"
-run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build.sh"
+if [[ "$SKIP_PREBUILD" != "true" ]]; then
+  log "Building classes once before the sweep"
+  run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build.sh"
 
-if [[ "$EXECUTOR" == "docker" ]]; then
-  log "Building Docker image once before the sweep"
-  run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
+  if [[ "$EXECUTOR" == "docker" ]]; then
+    log "Building Docker image once before the sweep"
+    run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
+  elif [[ "$EXECUTOR" == "hadoop" ]]; then
+    log "Building Docker Hadoop cluster image once before the sweep"
+    run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build-hadoop-cluster-image.sh" "$HADOOP_CLUSTER_IMAGE"
+  fi
+else
+  log "Skipping prebuild steps because SKIP_PREBUILD=true"
 fi
+
+cluster_config_for_nodes() {
+  local nodes="$1"
+  if [[ -n "$CLUSTER_CONFIG" ]]; then
+    printf '%s\n' "$CLUSTER_CONFIG"
+    return
+  fi
+  if (( nodes <= 12 )); then
+    printf '%s\n' "$PAPER_CLUSTER_CONFIG"
+  else
+    printf '%s\n' "$DENSE_CLUSTER_CONFIG"
+  fi
+}
 
 for workflow in $WORKFLOWS; do
   data_root="$DATASET_BASE_DIR/$workflow"
@@ -65,23 +107,28 @@ for workflow in $WORKFLOWS; do
     run_name="${workflow}-nodes-${nodes}"
     workspace="$BASE_WORK_DIR/$run_name"
     logfile="$LOG_DIR/$run_name.log"
+    cluster_config="$(cluster_config_for_nodes "$nodes")"
     : > "$logfile"
 
     log "Starting $run_name"
+    log "Using cluster config $cluster_config"
 
     if ! run_with_timestamped_log "$logfile" env \
       WORKSPACE="$workspace" \
       WORKFLOW="$workflow" \
       DATA_ROOT="$data_root" \
       PROFILE="$PROFILE" \
-      CLUSTER_CONFIG="$CLUSTER_CONFIG" \
+      CLUSTER_CONFIG="$cluster_config" \
       MAX_NODES="$nodes" \
       COMPARE_ROUNDS="$COMPARE_ROUNDS" \
       TRAINING_WARMUP_RUNS="$TRAINING_WARMUP_RUNS" \
       TRAINING_MEASURE_RUNS="$TRAINING_MEASURE_RUNS" \
       REUSE_DATA="$REUSE_DATA" \
+      HADOOP_KEEP_CLUSTER=true \
+      SKIP_BUILD=true \
       EXECUTOR="$EXECUTOR" \
       DOCKER_IMAGE="$DOCKER_IMAGE" \
+      HADOOP_CLUSTER_IMAGE="$HADOOP_CLUSTER_IMAGE" \
       GENE2LIFE_JAVA_OPTS="$GENE2LIFE_JAVA_OPTS" \
       "$ROOT_DIR/scripts/server-benchmark.sh"; then
       log "FAILED $run_name"

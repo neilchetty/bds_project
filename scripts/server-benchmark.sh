@@ -25,6 +25,7 @@ HADOOP_KEEP_CLUSTER="${HADOOP_KEEP_CLUSTER:-false}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
 REUSE_DATA="${REUSE_DATA:-true}"
+SKIP_BUILD="${SKIP_BUILD:-false}"
 GENERATE_ARGS=()
 GENERATION_METADATA_FILE="$DATA_ROOT/.generation-metadata.env"
 
@@ -128,7 +129,9 @@ case "$WORKFLOW" in
     ;;
 esac
 
-"$ROOT_DIR/scripts/build.sh"
+if [[ "$SKIP_BUILD" != "true" ]]; then
+  "$ROOT_DIR/scripts/build.sh"
+fi
 
 if [[ ! -f "$CLUSTER_CONFIG" ]]; then
   "$ROOT_DIR/scripts/generate-cluster-config.sh" "$CLUSTER_CONFIG"

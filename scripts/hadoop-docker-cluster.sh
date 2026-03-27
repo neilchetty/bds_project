@@ -22,10 +22,20 @@ YARN_ADMIN_PORT="${HADOOP_DOCKER_YARN_ADMIN_PORT:-18033}"
 YARN_WEB_PORT="${HADOOP_DOCKER_YARN_WEB_PORT:-18088}"
 ACCESS_HOST="${HADOOP_DOCKER_ACCESS_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
 ACCESS_HOST="${ACCESS_HOST:-localhost}"
-WARMUP_ON_START="${HADOOP_CLUSTER_WARMUP_ON_START:-true}"
+WARMUP_ON_START="${HADOOP_CLUSTER_WARMUP_ON_START:-false}"
 
 compose() {
   docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
+}
+
+worker_nodes() {
+  awk -F, '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+      print $2
+    }
+  ' "$CLUSTER_CONFIG"
 }
 
 expected_nodes() {
@@ -33,6 +43,10 @@ expected_nodes() {
 }
 
 expected_services() {
+  echo $(( "$(expected_nodes)" + 1 ))
+}
+
+expected_yarn_nodes() {
   echo $(( "$(expected_nodes)" + 1 ))
 }
 
@@ -103,9 +117,9 @@ labels_ready() {
 
 wait_for_health() {
   local total_nodes
-  total_nodes="$(expected_nodes)"
+  total_nodes="$(expected_yarn_nodes)"
   for _ in $(seq 1 90); do
-    if compose exec -T master bash -lc "hdfs dfsadmin -report >/tmp/hdfs-report.txt 2>/tmp/hdfs-report.err && yarn node -list >/tmp/yarn-nodes.txt 2>/tmp/yarn-nodes.err"; then
+    if timeout 30s docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" exec -T master bash -lc "hdfs dfsadmin -safemode wait >/tmp/hdfs-safemode.txt 2>/tmp/hdfs-safemode.err && hdfs dfsadmin -report >/tmp/hdfs-report.txt 2>/tmp/hdfs-report.err && yarn node -list >/tmp/yarn-nodes.txt 2>/tmp/yarn-nodes.err"; then
       local current_nodes
       current_nodes="$(compose exec -T master bash -lc "awk -F: '/Total Nodes/ {gsub(/ /, \"\", \$2); print \$2}' /tmp/yarn-nodes.txt" | tr -d '\r')"
       if [[ "$current_nodes" == "$total_nodes" ]]; then
@@ -160,6 +174,43 @@ apply_node_labels() {
   compose exec -T master bash -lc "yarn rmadmin -replaceLabelsOnNode \"$mapping\""
 }
 
+validate_worker_connectivity() {
+  local first_worker
+  first_worker="$(worker_nodes | head -n 1)"
+  [[ -n "$first_worker" ]]
+  compose exec -T "$first_worker" bash -lc "getent hosts master >/dev/null && hdfs dfs -ls / >/dev/null"
+}
+
+validate_cpu_pinning() {
+  local line cluster_id node_id cpu_threads io_buffer_kb memory_mb cpu_set container_id inspect_output actual_cpuset actual_memory actual_nano_cpus
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    IFS=',' read -r cluster_id node_id cpu_threads io_buffer_kb memory_mb cpu_set <<< "$line"
+    container_id="$(compose ps -q "$node_id")"
+    [[ -n "$container_id" ]] || {
+      echo "Missing container for worker $node_id" >&2
+      return 1
+    }
+    inspect_output="$(docker inspect "$container_id" --format '{{.HostConfig.CpusetCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.NanoCpus}}')"
+    IFS='|' read -r actual_cpuset actual_memory actual_nano_cpus <<< "$inspect_output"
+    if [[ -n "${cpu_set:-}" && "$actual_cpuset" != "$cpu_set" ]]; then
+      echo "Unexpected cpuset for $node_id: expected $cpu_set, got $actual_cpuset" >&2
+      return 1
+    fi
+    if [[ "$actual_memory" != "$(( memory_mb * 1024 * 1024 ))" ]]; then
+      echo "Unexpected memory limit for $node_id: expected ${memory_mb}m, got ${actual_memory} bytes" >&2
+      return 1
+    fi
+    if [[ "$actual_nano_cpus" != "$(( cpu_threads * 1000000000 ))" ]]; then
+      echo "Unexpected CPU quota for $node_id: expected ${cpu_threads} cores, got ${actual_nano_cpus} nano CPUs" >&2
+      return 1
+    fi
+    if [[ -n "${cpu_set:-}" ]]; then
+      compose exec -T "$node_id" bash -lc "test \"\$(awk '/^Cpus_allowed_list:/ {print \$2}' /proc/self/status)\" = \"$cpu_set\""
+    fi
+  done < <(grep -v '^\s*#' "$CLUSTER_CONFIG" | grep -v '^\s*$')
+}
+
 ensure_cluster_ready() {
   local started_cluster="false"
   ensure_image
@@ -197,6 +248,8 @@ validate_cluster() {
   local validation_root
   validation_root="$(mktemp -d "${TMPDIR:-/tmp}/gene2life-hadoop-validate.XXXXXX")"
   trap "rm -rf '$validation_root'" RETURN
+  validate_worker_connectivity
+  validate_cpu_pinning
   compose exec -T master bash -lc "printf 'gene2life-validation\n' > /tmp/gene2life-validate.txt && hdfs dfs -put -f /tmp/gene2life-validate.txt /user/${CLIENT_USER}/gene2life/validate.txt && hdfs dfs -cat /user/${CLIENT_USER}/gene2life/validate.txt"
   "$ROOT_DIR/scripts/run.sh" generate-data \
     --workflow gene2life \
@@ -240,6 +293,7 @@ case "$COMMAND" in
     fi
     ;;
   health)
+    compose exec -T master hdfs dfsadmin -safemode get
     compose exec -T master hdfs dfsadmin -report
     compose exec -T master yarn node -list
     if [[ "$ENABLE_NODE_LABELS" == "true" ]]; then

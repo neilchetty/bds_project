@@ -278,7 +278,7 @@ public final class WorkflowTaskExecutors {
                 String chunkId = String.format("%03d", i + 1);
                 Path chunkPath = inputs.outputDirectory().resolve("chunk-" + chunkId + ".fastq");
                 writeFastq(chunkPath, chunks.get(i));
-                writer.write(chunkId + "\t" + chunkPath.toAbsolutePath() + "\t" + chunks.get(i).size());
+                writer.write(chunkId + "\t" + chunkPath.getFileName() + "\t" + chunks.get(i).size());
                 writer.newLine();
             }
         }
@@ -539,7 +539,8 @@ public final class WorkflowTaskExecutors {
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split("\t");
                 if (parts[0].equals(chunkId)) {
-                    return Path.of(parts[1]);
+                    Path chunkPath = Path.of(parts[1]);
+                    return chunkPath.isAbsolute() ? chunkPath : manifest.getParent().resolve(chunkPath).normalize();
                 }
             }
         }

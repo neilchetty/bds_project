@@ -89,6 +89,7 @@ The implementation stabilizes training with warmup runs plus repeated measured r
 
 - `config/clusters-paper.csv` uses the literal paper-style per-node capacities
 - `config/clusters-z4-g5-paper-sweep.csv` maps that same heterogeneous pattern onto the Ubuntu server with CPU pinning
+- `config/clusters-z4-g5-dense-28.csv` is an explicit host-extension profile for 28 logical nodes; it is not a paper claim
 - `config/clusters-z4-g5-paper-sweep-scaled.csv` keeps the same four-subcluster pattern but increases logical-node capacity
 
 ## Data Mapping
@@ -100,6 +101,7 @@ This project uses generated but domain-shaped datasets instead of no-op simulati
 - `epigenomics`: FASTQ reads, reference FASTA, contaminant motifs
 
 These datasets are intended to preserve workflow pressure and file-processing behavior, not biological exactness.
+The dataset profiles (`small`, `medium`, `large`) change data volume only; they do not change DAG size.
 
 ## Metric Mapping
 

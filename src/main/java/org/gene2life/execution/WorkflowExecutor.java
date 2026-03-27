@@ -17,8 +17,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 
 public final class WorkflowExecutor {
@@ -56,19 +58,49 @@ public final class WorkflowExecutor {
 
     public List<JobRun> execute(Path dataRoot, Path runRoot, List<PlanAssignment> plan) throws Exception {
         Files.createDirectories(runRoot.resolve("jobs"));
+        List<PlanAssignment> submissionOrder = new ArrayList<>(plan);
+        submissionOrder.sort(Comparator
+                .comparingLong(PlanAssignment::predictedStartMillis)
+                .thenComparingInt(assignment -> workflow.orderOf(assignment.jobId())));
         Map<String, Future<JobRun>> futures = new HashMap<>();
-        List<PlanAssignment> orderedPlan = new ArrayList<>(plan);
-        orderedPlan.sort(Comparator.comparingInt(assignment -> workflow.orderOf(assignment.jobId())));
-        for (PlanAssignment assignment : orderedPlan) {
-            waitForDependencies(assignment.jobId(), futures);
-            NodeRuntime runtime = runtimes.get(assignment.nodeId());
-            futures.put(assignment.jobId(), runtime.submit(
-                    assignment,
-                    () -> executeAssignment(assignment, dataRoot, runRoot, futures, runtime.nodeProfile())));
-        }
+        Set<String> submitted = new HashSet<>();
+        Set<String> completed = new HashSet<>();
         List<JobRun> result = new ArrayList<>();
-        for (JobDefinition job : workflow.jobs()) {
-            result.add(futures.get(job.id()).get());
+        while (completed.size() < workflow.jobs().size()) {
+            boolean submittedAny = false;
+            for (PlanAssignment assignment : submissionOrder) {
+                JobDefinition job = workflow.job(assignment.jobId());
+                if (submitted.contains(job.id()) || !dependenciesSatisfied(job, completed)) {
+                    continue;
+                }
+                NodeRuntime runtime = runtimes.get(assignment.nodeId());
+                futures.put(assignment.jobId(), runtime.submit(
+                        assignment,
+                        () -> executeAssignment(assignment, dataRoot, runRoot, futures, runtime.nodeProfile())));
+                submitted.add(job.id());
+                submittedAny = true;
+            }
+
+            boolean completedAny = false;
+            for (JobDefinition job : workflow.jobs()) {
+                if (completed.contains(job.id())) {
+                    continue;
+                }
+                Future<JobRun> future = futures.get(job.id());
+                if (future == null || !future.isDone()) {
+                    continue;
+                }
+                result.add(future.get());
+                completed.add(job.id());
+                completedAny = true;
+            }
+
+            if (!submittedAny && !completedAny) {
+                if (completed.size() == workflow.jobs().size()) {
+                    break;
+                }
+                Thread.sleep(10L);
+            }
         }
         result.sort(Comparator.comparingLong(JobRun::actualStartMillis));
         return result;
@@ -80,10 +112,13 @@ public final class WorkflowExecutor {
         }
     }
 
-    private void waitForDependencies(String jobId, Map<String, Future<JobRun>> futures) throws Exception {
-        for (String dependency : workflow.job(jobId).dependencies()) {
-            futures.get(dependency).get();
+    private boolean dependenciesSatisfied(JobDefinition job, Set<String> completed) {
+        for (String dependency : job.dependencies()) {
+            if (!completed.contains(dependency)) {
+                return false;
+            }
         }
+        return true;
     }
 
     private TaskResult executeAssignment(

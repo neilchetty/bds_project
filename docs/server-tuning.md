@@ -18,6 +18,8 @@ There are two recommended operating modes:
 
 - paper-style default
   use `config/clusters-z4-g5-paper-sweep.csv` when the goal is to stay closest to the paper's heterogeneous 12-node structure
+- dense overnight extension
+  use `config/clusters-z4-g5-dense-28.csv` when the goal is to run the requested 28 logical-node sweep on this host
 - high-utilization variant
   use `config/clusters-z4-g5-paper-sweep-scaled.csv` when the goal is to push more of this server's CPU and memory while keeping the same four-subcluster shape
 
@@ -99,7 +101,7 @@ GENE2LIFE_JAVA_OPTS="-Xms8g -Xmx24g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+U
 Paper-style node-count sweep:
 
 ```bash
-for nodes in 4 7 10 12; do
+for nodes in 2 4 12; do
   WORKSPACE="./work/gene2life-paper-${nodes}" \
   WORKFLOW=gene2life \
   CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
@@ -109,6 +111,23 @@ for nodes in 4 7 10 12; do
 done
 ```
 
+Dense 28-node extension:
+
+```bash
+WORKSPACE="./work/gene2life-dense-28" \
+WORKFLOW=gene2life \
+CLUSTER_CONFIG=./config/clusters-z4-g5-dense-28.csv \
+MAX_NODES=28 \
+EXECUTOR=hadoop \
+./scripts/server-benchmark.sh
+```
+
+Full overnight sweep:
+
+```bash
+./scripts/run-all-workflow-sweeps.sh
+```
+
 Validate the project Docker Hadoop cluster before a long run:
 
 ```bash
@@ -116,6 +135,14 @@ Validate the project Docker Hadoop cluster before a long run:
   ./config/clusters-z4-g5-paper-sweep.csv \
   ./work/hadoop-docker-cluster \
   gene2life-hadoop-cluster:3.4.3
+```
+
+Validate Docker-only CPU pinning:
+
+```bash
+./scripts/validate-docker-node-pinning.sh \
+  ./config/clusters-z4-g5-paper-sweep.csv \
+  gene2life-java:latest
 ```
 
 ## Practical Notes

@@ -64,6 +64,7 @@ For benchmark runs:
 - `scripts/server-benchmark.sh` now tears down project-owned Docker runtime on exit
 - `EXECUTOR=hadoop` also stops the project Docker Hadoop cluster by default
 - set `HADOOP_KEEP_CLUSTER=true` if you want to keep that cluster alive for reuse
+- `./runner.sh` and `./commands.sh` use the same cleanup default unless you explicitly override `HADOOP_KEEP_CLUSTER=true`
 
 ## Cluster Profiles
 
@@ -71,18 +72,20 @@ The important profiles are:
 
 - `config/clusters-z4-g5-paper-sweep.csv`
   default paper-style 12-node heterogeneous profile for this server
+- `config/clusters-z4-g5-dense-28.csv`
+  dense 28-node host extension for overnight sweeps using the same four-cluster ordering idea
 - `config/clusters-z4-g5-paper-sweep-scaled.csv`
   same four-subcluster shape with larger logical nodes for higher host utilization
 - `config/clusters-z4-g5.csv`
   host-oriented profile if you want a different non-paper logical layout
 
-Use the paper-style profile when the goal is structural similarity to the paper. Use the scaled profile when the goal is to push more CPU and memory through the same workflow mix on this server.
+Use the paper-style profile when the goal is structural similarity to the paper. Use the dense 28-node profile when the goal is to run the requested `2 4 12 28` logical-node sweep on this host. Use the scaled profile when the goal is to push more CPU and memory through the same workflow mix on this server without changing the 12-node shape.
 
 ## Build
 
 Prerequisites:
 
-- Java 21
+- Java 17 or newer
 - Maven
 - Docker with Compose
 
@@ -122,6 +125,8 @@ Build the Docker Hadoop cluster image:
   gene2life-hadoop-cluster:3.4.3
 ```
 
+`up` waits for `HDFS` to leave safemode, confirms `YARN` node registration, and applies node labels before returning success.
+
 3. Validate `HDFS`, `YARN`, node labels, and a tiny Hadoop task submission.
 
 ```bash
@@ -129,6 +134,14 @@ Build the Docker Hadoop cluster image:
   ./config/clusters-z4-g5-paper-sweep.csv \
   ./work/hadoop-docker-cluster \
   gene2life-hadoop-cluster:3.4.3
+```
+
+Validate Docker-only CPU pinning with the same `cpu_set` semantics used by the logical-node executor:
+
+```bash
+./scripts/validate-docker-node-pinning.sh \
+  ./config/clusters-z4-g5-paper-sweep.csv \
+  gene2life-java:latest
 ```
 
 4. Generate a workflow dataset.
@@ -183,6 +196,62 @@ CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
 
 If you use `scripts/server-benchmark.sh` with `EXECUTOR=hadoop`, step 7 is automatic unless `HADOOP_KEEP_CLUSTER=true`.
 
+## Unattended Overnight Run
+
+Use `./runner.sh` when you want to start the full build, validation, sweep, reporting, and cleanup flow and then disconnect from the server.
+
+1. Stop any host Hadoop services you do not want running in parallel. The repo does not manage host Hadoop daemons for you.
+2. Start the unattended run.
+
+```bash
+./runner.sh
+```
+
+3. Optionally watch the live console log.
+
+```bash
+tail -f work/overnight-run-*/runner-console.log
+```
+
+The unattended flow runs, in order:
+
+- system and environment capture
+- `./scripts/build.sh`
+- `./scripts/build-image.sh gene2life-java:latest`
+- `./scripts/build-hadoop-cluster-image.sh gene2life-hadoop-cluster:3.4.3`
+- Docker CPU-pinning validation for the 12-node and 28-node configs
+- `./scripts/hadoop-docker-cluster.sh up`
+- `./scripts/hadoop-docker-cluster.sh health`
+- `./scripts/hadoop-docker-cluster.sh validate`
+- the full `2 4 12 28` Hadoop sweep across `gene2life`, `avianflu_small`, and `epigenomics`
+- HTML, PDF, text, and summary report generation
+- cleanup of repo-owned Docker runtime unless `HADOOP_KEEP_CLUSTER=true`
+
+The unattended session directory is:
+
+- `work/overnight-run-<timestamp>/`
+
+Important outputs inside that directory:
+
+- `runner-console.log`
+- `transcript.log`
+- `report.html`
+- `report.pdf`
+- `report.txt`
+- `result-summary.txt`
+- `run.env`
+- `workspaces/` with all workflow and node-count benchmark outputs
+- `sweep-logs/` with per-run logs
+
+`./commands.sh` is the direct foreground version of the same flow. It accepts an optional session directory path:
+
+```bash
+./commands.sh
+./commands.sh /absolute/path/to/session-dir
+```
+
+If `wkhtmltopdf` is not installed, the unattended run still succeeds and writes the HTML and text reports.
+
 ## Benchmark Commands
 
 Default paper-style benchmark:
@@ -215,7 +284,7 @@ GENE2LIFE_JAVA_OPTS="-Xms8g -Xmx24g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+U
 Paper-style node-count sweep:
 
 ```bash
-for nodes in 4 7 10 12; do
+for nodes in 2 4 12; do
   WORKSPACE="./work/gene2life-paper-${nodes}" \
   WORKFLOW=gene2life \
   CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
@@ -224,6 +293,35 @@ for nodes in 4 7 10 12; do
   ./scripts/server-benchmark.sh
 done
 ```
+
+Dense 28-node extension run:
+
+```bash
+WORKSPACE="./work/gene2life-dense-28" \
+WORKFLOW=gene2life \
+CLUSTER_CONFIG=./config/clusters-z4-g5-dense-28.csv \
+MAX_NODES=28 \
+EXECUTOR=hadoop \
+./scripts/server-benchmark.sh
+```
+
+Full overnight sweep for all three workflows with automatic `2 4 12 28` config selection:
+
+```bash
+./scripts/run-all-workflow-sweeps.sh
+```
+
+The sweep wrapper now defaults to:
+
+- `EXECUTOR=hadoop`
+- workflows `gene2life avianflu_small epigenomics`
+- node counts `2 4 12 28`
+- paper profile for `2`, `4`, and `12`
+- dense 28-node profile for `28`
+- output root `work/hadoop-overnight-sweeps` when you run `./scripts/run-all-workflow-sweeps.sh` directly
+- cleanup of the project Docker Hadoop cluster at the end unless `RUN_ALL_KEEP_CLUSTER=true`
+
+When the same sweep runs through `./runner.sh` or `./commands.sh`, the sweep output root is redirected into that session at `work/overnight-run-<timestamp>/workspaces/`.
 
 ## Data Generation
 
@@ -264,7 +362,11 @@ Useful commands:
 - HDFS health and a write/read roundtrip
 - YARN node registration
 - node-label configuration
+- worker CPU and memory pinning against the cluster config
+- worker-to-master name resolution and HDFS access from a worker container
 - a tiny end-to-end Hadoop workflow submission
+
+`health` also prints the current safemode state before the normal `HDFS` and `YARN` reports.
 
 ## Outputs
 
@@ -275,6 +377,10 @@ Every run keeps the same report shape regardless of executor:
 - per-scheduler run directories with `schedule-plan.csv`, `run-metrics.csv`, and task outputs
 
 During Hadoop execution, payload data and intermediates live in `HDFS`; the final reports remain local under the selected workspace.
+
+For unattended runs started with `./runner.sh`, the selected workspace root is the per-session `workspaces/` directory under `work/overnight-run-<timestamp>/`.
+
+`small`, `medium`, and `large` profiles change dataset size only. They do not change workflow structure or job count.
 
 ## Metrics
 
