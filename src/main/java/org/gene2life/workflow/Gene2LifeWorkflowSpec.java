@@ -2,6 +2,7 @@ package org.gene2life.workflow;
 
 import org.gene2life.cli.CliArguments;
 import org.gene2life.data.DataGenerator;
+import org.gene2life.hadoop.HadoopTaskInputs;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.TaskType;
@@ -86,6 +87,72 @@ public final class Gene2LifeWorkflowSpec implements WorkflowSpec {
             case "protpars" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "clustalw2")), outputDirectory, Map.of());
             case "drawgram1" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "dnapars")), outputDirectory, Map.of());
             case "drawgram2" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "protpars")), outputDirectory, Map.of());
+            default -> throw new IllegalArgumentException("Unknown gene2life training job: " + jobId);
+        };
+    }
+
+    @Override
+    public HadoopTaskInputs resolveHadoopInputs(String jobId, String dataRoot, String runRoot) {
+        String outputDirectory = hdfsJobDirectory(runRoot, jobId);
+        return switch (jobId) {
+            case "blast1" -> new HadoopTaskInputs(
+                    List.of(normalizeHdfsPath(dataRoot) + "/query.fasta", normalizeHdfsPath(dataRoot) + "/reference-a.fasta"),
+                    outputDirectory,
+                    Map.of());
+            case "blast2" -> new HadoopTaskInputs(
+                    List.of(normalizeHdfsPath(dataRoot) + "/query.fasta", normalizeHdfsPath(dataRoot) + "/reference-b.fasta"),
+                    outputDirectory,
+                    Map.of());
+            case "clustalw1" -> new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("blast1", hdfsJobDirectory(runRoot, "blast1"))),
+                    outputDirectory,
+                    Map.of());
+            case "clustalw2" -> new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("blast2", hdfsJobDirectory(runRoot, "blast2"))),
+                    outputDirectory,
+                    Map.of());
+            case "dnapars" -> new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("clustalw1", hdfsJobDirectory(runRoot, "clustalw1"))),
+                    outputDirectory,
+                    Map.of());
+            case "protpars" -> new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("clustalw2", hdfsJobDirectory(runRoot, "clustalw2"))),
+                    outputDirectory,
+                    Map.of());
+            case "drawgram1" -> new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("dnapars", hdfsJobDirectory(runRoot, "dnapars"))),
+                    outputDirectory,
+                    Map.of());
+            case "drawgram2" -> new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("protpars", hdfsJobDirectory(runRoot, "protpars"))),
+                    outputDirectory,
+                    Map.of());
+            default -> throw new IllegalArgumentException("Unknown gene2life job: " + jobId);
+        };
+    }
+
+    @Override
+    public HadoopTaskInputs resolveHadoopTrainingInputs(String jobId, String dataRoot) {
+        String outputDirectory = normalizeHdfsPath(dataRoot) + "/training/generated/" + jobId;
+        return switch (jobId) {
+            case "blast1" -> new HadoopTaskInputs(
+                    List.of(
+                            normalizeHdfsPath(dataRoot) + "/training/query-sample.fasta",
+                            normalizeHdfsPath(dataRoot) + "/training/reference-a-sample.fasta"),
+                    outputDirectory,
+                    Map.of());
+            case "blast2" -> new HadoopTaskInputs(
+                    List.of(
+                            normalizeHdfsPath(dataRoot) + "/training/query-sample.fasta",
+                            normalizeHdfsPath(dataRoot) + "/training/reference-b-sample.fasta"),
+                    outputDirectory,
+                    Map.of());
+            case "clustalw1" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "blast1")), outputDirectory, Map.of());
+            case "clustalw2" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "blast2")), outputDirectory, Map.of());
+            case "dnapars" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "clustalw1")), outputDirectory, Map.of());
+            case "protpars" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "clustalw2")), outputDirectory, Map.of());
+            case "drawgram1" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "dnapars")), outputDirectory, Map.of());
+            case "drawgram2" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "protpars")), outputDirectory, Map.of());
             default -> throw new IllegalArgumentException("Unknown gene2life training job: " + jobId);
         };
     }

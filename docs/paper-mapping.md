@@ -79,6 +79,12 @@ This preserves the paper's 100-job scale.
 
 The implementation stabilizes training with warmup runs plus repeated measured runs and uses the median observed duration per cluster/job profile.
 
+## Execution Mapping
+
+- `local`: one host JVM executes the assigned task directly
+- `docker`: each logical node runs as a Docker container and jobs execute with `docker exec`
+- `hadoop`: workflow inputs are mirrored into HDFS, each workflow task is submitted as a one-task MapReduce job on the Docker Hadoop cluster, and outputs are copied back into the existing local run-report layout
+
 ## Cluster Mapping
 
 - `config/clusters-paper.csv` uses the literal paper-style per-node capacities
@@ -106,8 +112,9 @@ These datasets are intended to preserve workflow pressure and file-processing be
 
 ## What Still Differs From The Paper
 
-- execution uses a standalone Java engine, not native Hi-WAY/Hadoop/YARN
+- scheduling and workflow orchestration are implemented in this repository rather than reusing the original Hi-WAY codebase
+- Hadoop mode uses a Dockerized single-host cluster, not separate physical VMs
 - Docker-isolated logical nodes share one host kernel
 - Java tasks approximate the original bioinformatics tools instead of invoking the original native binaries
 
-So the project now matches the workflow structures and scheduler comparison setup much more closely, but it is still a paper-inspired reproduction rather than a byte-for-byte recreation of the original software stack.
+So the project now matches the paper's workflow structures, scheduler comparison, and Hadoop/HDFS/YARN-style execution path much more closely, but it is still a paper-inspired reproduction rather than a byte-for-byte recreation of the original software stack.

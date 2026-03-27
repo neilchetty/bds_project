@@ -2,11 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/build/classes"
+MAVEN_BIN="$("$ROOT_DIR/scripts/ensure-maven.sh")"
 
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR"
+"$MAVEN_BIN" -Dmaven.repo.local="$ROOT_DIR/.m2/repository" clean package
 
-javac --release 17 -d "$BUILD_DIR" $(find "$ROOT_DIR/src/main/java" -name '*.java' | sort)
-
-echo "Compiled classes into $BUILD_DIR"
+echo "Built shaded jar at $ROOT_DIR/target/gene2life-app.jar"

@@ -1,6 +1,7 @@
 package org.gene2life.workflow;
 
 import org.gene2life.cli.CliArguments;
+import org.gene2life.hadoop.HadoopTaskInputs;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.TaskType;
@@ -115,6 +116,123 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
         }
         if (jobId.equals("pileup")) {
             return new TaskInputs(List.of(trainingOutputPath(dataRoot, "mapMerge"), trainingOutputPath(dataRoot, "maqIndex")), outputDirectory, Map.of());
+        }
+        throw new IllegalArgumentException("Unknown epigenomics training job: " + jobId);
+    }
+
+    @Override
+    public HadoopTaskInputs resolveHadoopInputs(String jobId, String dataRoot, String runRoot) {
+        String outputDirectory = hdfsJobDirectory(runRoot, jobId);
+        if (jobId.equals("fastqSplit")) {
+            return new HadoopTaskInputs(
+                    List.of(normalizeHdfsPath(dataRoot) + "/raw.fastq"),
+                    outputDirectory,
+                    Map.of("chunk_count", Integer.toString(splitCount())));
+        }
+        if (jobId.startsWith("filterContams-")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopOutputPath("fastqSplit", hdfsJobDirectory(runRoot, "fastqSplit")),
+                            normalizeHdfsPath(dataRoot) + "/contaminants.tsv"),
+                    outputDirectory,
+                    Map.of("chunk_id", chunkId(jobId)));
+        }
+        if (jobId.startsWith("sol2sanger-")) {
+            return new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("filterContams-" + chunkId(jobId), hdfsJobDirectory(runRoot, "filterContams-" + chunkId(jobId)))),
+                    outputDirectory,
+                    Map.of());
+        }
+        if (jobId.startsWith("fastq2bfq-")) {
+            return new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("sol2sanger-" + chunkId(jobId), hdfsJobDirectory(runRoot, "sol2sanger-" + chunkId(jobId)))),
+                    outputDirectory,
+                    Map.of());
+        }
+        if (jobId.startsWith("map-")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopOutputPath("fastq2bfq-" + chunkId(jobId), hdfsJobDirectory(runRoot, "fastq2bfq-" + chunkId(jobId))),
+                            normalizeHdfsPath(dataRoot) + "/reference.fasta"),
+                    outputDirectory,
+                    Map.of());
+        }
+        if (jobId.equals("mapMerge")) {
+            List<String> inputs = new ArrayList<>();
+            for (int i = 1; i <= splitCount(); i++) {
+                String chunk = pad(i);
+                inputs.add(hadoopOutputPath("map-" + chunk, hdfsJobDirectory(runRoot, "map-" + chunk)));
+            }
+            return new HadoopTaskInputs(inputs, outputDirectory, Map.of());
+        }
+        if (jobId.equals("maqIndex")) {
+            return new HadoopTaskInputs(
+                    List.of(hadoopOutputPath("mapMerge", hdfsJobDirectory(runRoot, "mapMerge"))),
+                    outputDirectory,
+                    Map.of());
+        }
+        if (jobId.equals("pileup")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopOutputPath("mapMerge", hdfsJobDirectory(runRoot, "mapMerge")),
+                            hadoopOutputPath("maqIndex", hdfsJobDirectory(runRoot, "maqIndex"))),
+                    outputDirectory,
+                    Map.of());
+        }
+        throw new IllegalArgumentException("Unknown epigenomics job: " + jobId);
+    }
+
+    @Override
+    public HadoopTaskInputs resolveHadoopTrainingInputs(String jobId, String dataRoot) {
+        String outputDirectory = normalizeHdfsPath(dataRoot) + "/training/generated/" + jobId;
+        if (jobId.equals("fastqSplit")) {
+            return new HadoopTaskInputs(
+                    List.of(normalizeHdfsPath(dataRoot) + "/training/raw.fastq"),
+                    outputDirectory,
+                    Map.of("chunk_count", "4"));
+        }
+        if (jobId.equals("filterContams-001")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopTrainingOutputPath(dataRoot, "fastqSplit"),
+                            normalizeHdfsPath(dataRoot) + "/training/contaminants.tsv"),
+                    outputDirectory,
+                    Map.of("chunk_id", "001"));
+        }
+        if (jobId.equals("sol2sanger-001")) {
+            return new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "filterContams-001")), outputDirectory, Map.of());
+        }
+        if (jobId.equals("fastq2bfq-001")) {
+            return new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "sol2sanger-001")), outputDirectory, Map.of());
+        }
+        if (jobId.equals("map-001")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopTrainingOutputPath(dataRoot, "fastq2bfq-001"),
+                            normalizeHdfsPath(dataRoot) + "/training/reference.fasta"),
+                    outputDirectory,
+                    Map.of());
+        }
+        if (jobId.equals("mapMerge")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopTrainingOutputPath(dataRoot, "map-001"),
+                            hadoopTrainingOutputPath(dataRoot, "map-001"),
+                            hadoopTrainingOutputPath(dataRoot, "map-001"),
+                            hadoopTrainingOutputPath(dataRoot, "map-001")),
+                    outputDirectory,
+                    Map.of());
+        }
+        if (jobId.equals("maqIndex")) {
+            return new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "mapMerge")), outputDirectory, Map.of());
+        }
+        if (jobId.equals("pileup")) {
+            return new HadoopTaskInputs(
+                    List.of(
+                            hadoopTrainingOutputPath(dataRoot, "mapMerge"),
+                            hadoopTrainingOutputPath(dataRoot, "maqIndex")),
+                    outputDirectory,
+                    Map.of());
         }
         throw new IllegalArgumentException("Unknown epigenomics training job: " + jobId);
     }

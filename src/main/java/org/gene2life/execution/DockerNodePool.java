@@ -16,11 +16,13 @@ import java.util.Map;
 public final class DockerNodePool implements AutoCloseable {
     private final String dockerImage;
     private final Path mountRoot;
+    private final String namespace;
     private final Map<String, NodeProfile> nodesByContainerName;
 
     public DockerNodePool(String dockerImage, Path mountRoot, String namespace, List<NodeProfile> nodes) throws IOException, InterruptedException {
         this.dockerImage = dockerImage;
         this.mountRoot = mountRoot.toAbsolutePath();
+        this.namespace = namespace.toLowerCase().replaceAll("[^a-z0-9]+", "-");
         this.nodesByContainerName = new LinkedHashMap<>();
         Files.createDirectories(this.mountRoot);
         for (NodeProfile node : nodes) {
@@ -38,9 +40,8 @@ public final class DockerNodePool implements AutoCloseable {
         command.add("exec");
         command.add(containerName);
         command.add("java");
-        command.add("-cp");
-        command.add("/app/classes");
-        command.add("org.gene2life.cli.Main");
+        command.add("-jar");
+        command.add("/app/gene2life-app.jar");
         command.add("run-job");
         command.add("--workflow");
         command.add(workflowSpec.workflowId());
@@ -100,6 +101,10 @@ public final class DockerNodePool implements AutoCloseable {
         java.util.ArrayList<String> mutableCommand = new java.util.ArrayList<>(command);
         mutableCommand.add("--name");
         mutableCommand.add(containerName);
+        mutableCommand.add("--label");
+        mutableCommand.add("org.gene2life.runtime=docker-node");
+        mutableCommand.add("--label");
+        mutableCommand.add("org.gene2life.namespace=" + namespace);
         mutableCommand.add("--cpus");
         mutableCommand.add(Integer.toString(nodeProfile.cpuThreads()));
         if (nodeProfile.hasDedicatedCpuSet()) {

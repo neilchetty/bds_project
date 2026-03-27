@@ -7,6 +7,9 @@ import org.gene2life.execution.ExecutionMode;
 import org.gene2life.execution.JobOutputs;
 import org.gene2life.execution.TrainingRunner;
 import org.gene2life.execution.WorkflowExecutor;
+import org.gene2life.hadoop.HadoopExecutionConfig;
+import org.gene2life.hadoop.HadoopJobRunner;
+import org.gene2life.hadoop.HadoopSupport;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.NodeProfile;
@@ -68,6 +71,14 @@ public final class Main {
                 cli.optionInt("max-nodes", 0),
                 ExecutionMode.fromCliValue(cli.option("executor", "local")),
                 cli.option("docker-image", "gene2life-java:latest"),
+                cli.option("hdfs-data-root", ""),
+                cli.option("hdfs-work-root", ""),
+                cli.option("hadoop-conf-dir", System.getenv().getOrDefault("HADOOP_CONF_DIR", "")),
+                cli.option("hadoop-fs-default", System.getenv().getOrDefault("HADOOP_FS_DEFAULT", "")),
+                cli.option("hadoop-framework-name", System.getenv().getOrDefault("HADOOP_FRAMEWORK_NAME", "yarn")),
+                cli.option("hadoop-yarn-rm", System.getenv().getOrDefault("HADOOP_YARN_RM", "")),
+                cli.optionBoolean("hadoop-enable-node-labels",
+                        Boolean.parseBoolean(System.getenv().getOrDefault("HADOOP_ENABLE_NODE_LABELS", "false"))),
                 cli.optionInt("training-warmup-runs", 1),
                 cli.optionInt("training-measure-runs", 3));
     }
@@ -81,6 +92,13 @@ public final class Main {
             int maxNodes,
             ExecutionMode executionMode,
             String dockerImage,
+            String hdfsDataRoot,
+            String hdfsWorkRoot,
+            String hadoopConfDir,
+            String hadoopFsDefault,
+            String hadoopFrameworkName,
+            String hadoopYarnRm,
+            boolean hadoopEnableNodeLabels,
             int trainingWarmupRuns,
             int trainingMeasureRuns) throws Exception {
         WorkflowDefinition workflow = workflowSpec.definition();
@@ -93,29 +111,57 @@ public final class Main {
                 workflow.workflowId() + "-" + schedulerName + "-" + workspace.getFileName(),
                 clusters.stream().flatMap(cluster -> cluster.nodes().stream()).toList())
                 : null;
-        Scheduler scheduler = scheduler(schedulerName);
-        TrainingBenchmarks benchmarks;
-        try {
-            benchmarks = schedulerName.equalsIgnoreCase("wsh")
-                    ? new TrainingRunner(workflowSpec, executors, executionMode, dockerNodePool, trainingWarmupRuns, trainingMeasureRuns)
-                    .benchmark(dataRoot, clusters)
-                    : TrainingBenchmarks.empty();
-        } catch (Exception exception) {
-            if (dockerNodePool != null) {
-                dockerNodePool.close();
-            }
-            throw exception;
+        Path runRoot = workspace.resolve(schedulerName.toLowerCase());
+        HadoopExecutionConfig hadoopExecutionConfig = executionMode == ExecutionMode.HADOOP
+                ? buildHadoopExecutionConfig(
+                workflowSpec,
+                workspace,
+                hdfsDataRoot,
+                hdfsWorkRoot,
+                hadoopConfDir,
+                hadoopFsDefault,
+                hadoopFrameworkName,
+                hadoopYarnRm,
+                hadoopEnableNodeLabels)
+                : null;
+        HadoopJobRunner hadoopJobRunner = null;
+        if (hadoopExecutionConfig != null) {
+            hadoopJobRunner = new HadoopJobRunner(new HadoopSupport(hadoopExecutionConfig));
+            hadoopJobRunner.syncDataRoot(dataRoot);
         }
-        List<PlanAssignment> plan = scheduler.buildPlan(workflow, clusters, benchmarks);
-        Path runRoot = workspace.resolve(scheduler.name().toLowerCase());
-        WorkflowExecutor executor = new WorkflowExecutor(workflowSpec, executors, clusters, executionMode, dockerNodePool);
         try {
+            Scheduler scheduler = scheduler(schedulerName);
+            TrainingBenchmarks benchmarks = schedulerName.equalsIgnoreCase("wsh")
+                    ? new TrainingRunner(
+                    workflowSpec,
+                    executors,
+                    executionMode,
+                    dockerNodePool,
+                    hadoopJobRunner,
+                    trainingWarmupRuns,
+                    trainingMeasureRuns).benchmark(dataRoot, clusters)
+                    : TrainingBenchmarks.empty();
+            List<PlanAssignment> plan = scheduler.buildPlan(workflow, clusters, benchmarks);
+            WorkflowExecutor executor = new WorkflowExecutor(
+                    workflowSpec,
+                    executors,
+                    clusters,
+                    executionMode,
+                    dockerNodePool,
+                    hadoopJobRunner,
+                    hadoopExecutionConfig == null
+                            ? ""
+                            : hadoopExecutionConfig.normalizedWorkspaceRoot() + "/" + scheduler.name().toLowerCase());
             List<JobRun> runs = executor.execute(dataRoot, runRoot, plan);
-            new ReportWriter().writeRunReport(runRoot, workflow, clusters, scheduler.name(), benchmarks, plan, runs);
-            System.out.println("Completed " + scheduler.name() + " " + workflow.workflowId() + " run under " + runRoot.toAbsolutePath());
-            return new RunOutcome(scheduler.name(), runRoot, runs);
+            try {
+                new ReportWriter().writeRunReport(runRoot, workflow, clusters, scheduler.name(), benchmarks, plan, runs);
+                System.out.println("Completed " + scheduler.name() + " " + workflow.workflowId() + " run under "
+                        + runRoot.toAbsolutePath());
+                return new RunOutcome(scheduler.name(), runRoot, runs);
+            } finally {
+                executor.close();
+            }
         } finally {
-            executor.close();
             if (dockerNodePool != null) {
                 dockerNodePool.close();
             }
@@ -131,6 +177,15 @@ public final class Main {
         int maxNodes = cli.optionInt("max-nodes", 0);
         ExecutionMode executionMode = ExecutionMode.fromCliValue(cli.option("executor", "local"));
         String dockerImage = cli.option("docker-image", "gene2life-java:latest");
+        String hdfsDataRoot = cli.option("hdfs-data-root", "");
+        String hdfsWorkRoot = cli.option("hdfs-work-root", "");
+        String hadoopConfDir = cli.option("hadoop-conf-dir", System.getenv().getOrDefault("HADOOP_CONF_DIR", ""));
+        String hadoopFsDefault = cli.option("hadoop-fs-default", System.getenv().getOrDefault("HADOOP_FS_DEFAULT", ""));
+        String hadoopFrameworkName = cli.option("hadoop-framework-name", System.getenv().getOrDefault("HADOOP_FRAMEWORK_NAME", "yarn"));
+        String hadoopYarnRm = cli.option("hadoop-yarn-rm", System.getenv().getOrDefault("HADOOP_YARN_RM", ""));
+        boolean hadoopEnableNodeLabels = cli.optionBoolean(
+                "hadoop-enable-node-labels",
+                Boolean.parseBoolean(System.getenv().getOrDefault("HADOOP_ENABLE_NODE_LABELS", "false")));
         int trainingWarmupRuns = cli.optionInt("training-warmup-runs", 1);
         int trainingMeasureRuns = cli.optionInt("training-measure-runs", 3);
         List<ClusterProfile> clusters = ClusterProfiles.limitRoundRobin(ClusterConfigLoader.load(clusterConfig), maxNodes);
@@ -140,19 +195,79 @@ public final class Main {
             Path roundWorkspace = workspace.resolve(String.format("round-%02d", round));
             if (wshFirst) {
                 RunOutcome wsh = runSchedulerInternal(
-                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
-                        trainingWarmupRuns, trainingMeasureRuns);
+                        workflowSpec,
+                        roundWorkspace,
+                        dataRoot,
+                        clusterConfig,
+                        "wsh",
+                        maxNodes,
+                        executionMode,
+                        dockerImage,
+                        hdfsDataRoot,
+                        hdfsWorkRoot,
+                        hadoopConfDir,
+                        hadoopFsDefault,
+                        hadoopFrameworkName,
+                        hadoopYarnRm,
+                        hadoopEnableNodeLabels,
+                        trainingWarmupRuns,
+                        trainingMeasureRuns);
                 RunOutcome heft = runSchedulerInternal(
-                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
-                        trainingWarmupRuns, trainingMeasureRuns);
+                        workflowSpec,
+                        roundWorkspace,
+                        dataRoot,
+                        clusterConfig,
+                        "heft",
+                        maxNodes,
+                        executionMode,
+                        dockerImage,
+                        hdfsDataRoot,
+                        hdfsWorkRoot,
+                        hadoopConfDir,
+                        hadoopFsDefault,
+                        hadoopFrameworkName,
+                        hadoopYarnRm,
+                        hadoopEnableNodeLabels,
+                        trainingWarmupRuns,
+                        trainingMeasureRuns);
                 roundOutcomes.add(new RoundOutcome(round, "WSH->HEFT", wsh, heft));
             } else {
                 RunOutcome heft = runSchedulerInternal(
-                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "heft", maxNodes, executionMode, dockerImage,
-                        trainingWarmupRuns, trainingMeasureRuns);
+                        workflowSpec,
+                        roundWorkspace,
+                        dataRoot,
+                        clusterConfig,
+                        "heft",
+                        maxNodes,
+                        executionMode,
+                        dockerImage,
+                        hdfsDataRoot,
+                        hdfsWorkRoot,
+                        hadoopConfDir,
+                        hadoopFsDefault,
+                        hadoopFrameworkName,
+                        hadoopYarnRm,
+                        hadoopEnableNodeLabels,
+                        trainingWarmupRuns,
+                        trainingMeasureRuns);
                 RunOutcome wsh = runSchedulerInternal(
-                        workflowSpec, roundWorkspace, dataRoot, clusterConfig, "wsh", maxNodes, executionMode, dockerImage,
-                        trainingWarmupRuns, trainingMeasureRuns);
+                        workflowSpec,
+                        roundWorkspace,
+                        dataRoot,
+                        clusterConfig,
+                        "wsh",
+                        maxNodes,
+                        executionMode,
+                        dockerImage,
+                        hdfsDataRoot,
+                        hdfsWorkRoot,
+                        hadoopConfDir,
+                        hadoopFsDefault,
+                        hadoopFrameworkName,
+                        hadoopYarnRm,
+                        hadoopEnableNodeLabels,
+                        trainingWarmupRuns,
+                        trainingMeasureRuns);
                 roundOutcomes.add(new RoundOutcome(round, "HEFT->WSH", wsh, heft));
             }
         }
@@ -233,6 +348,44 @@ public final class Main {
             return 0.0;
         }
         return ((double) baseline - candidate) * 100.0 / baseline;
+    }
+
+    private static HadoopExecutionConfig buildHadoopExecutionConfig(
+            WorkflowSpec workflowSpec,
+            Path workspace,
+            String hdfsDataRoot,
+            String hdfsWorkRoot,
+            String hadoopConfDir,
+            String hadoopFsDefault,
+            String hadoopFrameworkName,
+            String hadoopYarnRm,
+            boolean hadoopEnableNodeLabels) {
+        String currentUser = System.getProperty("user.name", "gene2life");
+        String defaultRoot = "/user/" + currentUser + "/gene2life";
+        String dataRoot = hdfsDataRoot == null || hdfsDataRoot.isBlank()
+                ? defaultRoot + "/data/" + workflowSpec.workflowId()
+                : workflowSpec.normalizeHdfsPath(hdfsDataRoot);
+        String workspaceRoot = hdfsWorkRoot == null || hdfsWorkRoot.isBlank()
+                ? defaultRoot + "/work/" + workflowSpec.workflowId() + "/" + sanitizeWorkspace(workspace)
+                : workflowSpec.normalizeHdfsPath(hdfsWorkRoot) + "/" + sanitizeWorkspace(workspace);
+        return new HadoopExecutionConfig(
+                dataRoot,
+                workspaceRoot,
+                hadoopConfDir,
+                hadoopFsDefault,
+                hadoopFrameworkName,
+                hadoopYarnRm,
+                hadoopEnableNodeLabels);
+    }
+
+    private static String sanitizeWorkspace(Path workspace) {
+        String normalized = workspace.toAbsolutePath().normalize().toString().replace('\\', '/');
+        normalized = normalized.replaceAll("[^A-Za-z0-9/_-]", "-");
+        normalized = normalized.replaceAll("/+", "/");
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized.isBlank() ? "default" : normalized;
     }
 
     private static Path commonAncestor(Path left, Path right) {

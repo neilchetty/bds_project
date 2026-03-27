@@ -1,7 +1,7 @@
 FROM eclipse-temurin:17-jre
 
 WORKDIR /app
-COPY build/classes /app/classes
+COPY target/gene2life-app.jar /app/gene2life-app.jar
 COPY config /app/config
 
-ENTRYPOINT ["java", "-cp", "/app/classes", "org.gene2life.cli.Main"]
+ENTRYPOINT ["java", "-jar", "/app/gene2life-app.jar"]

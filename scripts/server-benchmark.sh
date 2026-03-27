@@ -6,18 +6,40 @@ WORKSPACE="${WORKSPACE:-$ROOT_DIR/work/server-benchmark}"
 WORKFLOW="${WORKFLOW:-gene2life}"
 DATA_ROOT="${DATA_ROOT:-$WORKSPACE/data}"
 PROFILE="${PROFILE:-medium}"
-CLUSTER_CONFIG="${CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5.csv}"
+CLUSTER_CONFIG="${CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.csv}"
 GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication}"
 export GENE2LIFE_JAVA_OPTS
 COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
 MAX_NODES="${MAX_NODES:-0}"
 EXECUTOR="${EXECUTOR:-docker}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
+HADOOP_CLUSTER_IMAGE="${HADOOP_CLUSTER_IMAGE:-gene2life-hadoop-cluster:3.4.3}"
+HADOOP_CLUSTER_WORKDIR="${HADOOP_CLUSTER_WORKDIR:-$ROOT_DIR/work/hadoop-docker-cluster}"
+HADOOP_DOCKER_ACCESS_HOST="${HADOOP_DOCKER_ACCESS_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
+HADOOP_DOCKER_ACCESS_HOST="${HADOOP_DOCKER_ACCESS_HOST:-localhost}"
+HADOOP_FS_DEFAULT="${HADOOP_FS_DEFAULT:-hdfs://${HADOOP_DOCKER_ACCESS_HOST}:${HADOOP_DOCKER_NN_PORT:-19000}}"
+HADOOP_YARN_RM="${HADOOP_YARN_RM:-${HADOOP_DOCKER_ACCESS_HOST}:${HADOOP_DOCKER_YARN_RM_PORT:-18032}}"
+HADOOP_FRAMEWORK_NAME="${HADOOP_FRAMEWORK_NAME:-yarn}"
+HADOOP_ENABLE_NODE_LABELS="${HADOOP_ENABLE_NODE_LABELS:-true}"
+HADOOP_KEEP_CLUSTER="${HADOOP_KEEP_CLUSTER:-false}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
 REUSE_DATA="${REUSE_DATA:-true}"
 GENERATE_ARGS=()
 GENERATION_METADATA_FILE="$DATA_ROOT/.generation-metadata.env"
+
+cleanup_runtime() {
+  if [[ "$EXECUTOR" == "docker" ]]; then
+    "$ROOT_DIR/scripts/cleanup-project-runtime.sh" docker-nodes
+  elif [[ "$EXECUTOR" == "hadoop" && "$HADOOP_KEEP_CLUSTER" != "true" ]]; then
+    HADOOP_CLUSTER_WORKDIR="$HADOOP_CLUSTER_WORKDIR" \
+      HADOOP_CLUSTER_IMAGE="$HADOOP_CLUSTER_IMAGE" \
+      CLUSTER_CONFIG="$CLUSTER_CONFIG" \
+      "$ROOT_DIR/scripts/cleanup-project-runtime.sh" all
+  fi
+}
+
+trap cleanup_runtime EXIT
 
 case "$WORKFLOW" in
   gene2life)
@@ -108,12 +130,14 @@ esac
 
 "$ROOT_DIR/scripts/build.sh"
 
-if [[ "$EXECUTOR" == "docker" ]]; then
-  "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
-fi
-
 if [[ ! -f "$CLUSTER_CONFIG" ]]; then
   "$ROOT_DIR/scripts/generate-cluster-config.sh" "$CLUSTER_CONFIG"
+fi
+
+if [[ "$EXECUTOR" == "docker" ]]; then
+  "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
+elif [[ "$EXECUTOR" == "hadoop" ]]; then
+  "$ROOT_DIR/scripts/hadoop-docker-cluster.sh" up "$CLUSTER_CONFIG" "$HADOOP_CLUSTER_WORKDIR" "$HADOOP_CLUSTER_IMAGE"
 fi
 
 mkdir -p "$WORKSPACE"
@@ -148,17 +172,35 @@ else
   printf '%s\n' "$DESIRED_METADATA" > "$GENERATION_METADATA_FILE"
 fi
 
-"$ROOT_DIR/scripts/run.sh" compare \
-  --workflow "$WORKFLOW" \
-  --workspace "$WORKSPACE" \
-  --data-root "$DATA_ROOT" \
-  --cluster-config "$CLUSTER_CONFIG" \
-  --rounds "$COMPARE_ROUNDS" \
-  --max-nodes "$MAX_NODES" \
-  --training-warmup-runs "$TRAINING_WARMUP_RUNS" \
-  --training-measure-runs "$TRAINING_MEASURE_RUNS" \
-  --executor "$EXECUTOR" \
-  --docker-image "$DOCKER_IMAGE"
+if [[ "$EXECUTOR" == "hadoop" ]]; then
+  "$ROOT_DIR/scripts/run.sh" compare \
+    --workflow "$WORKFLOW" \
+    --workspace "$WORKSPACE" \
+    --data-root "$DATA_ROOT" \
+    --cluster-config "$CLUSTER_CONFIG" \
+    --rounds "$COMPARE_ROUNDS" \
+    --max-nodes "$MAX_NODES" \
+    --training-warmup-runs "$TRAINING_WARMUP_RUNS" \
+    --training-measure-runs "$TRAINING_MEASURE_RUNS" \
+    --executor "$EXECUTOR" \
+    --hadoop-conf-dir "$HADOOP_CLUSTER_WORKDIR/host-conf" \
+    --hadoop-fs-default "$HADOOP_FS_DEFAULT" \
+    --hadoop-framework-name "$HADOOP_FRAMEWORK_NAME" \
+    --hadoop-yarn-rm "$HADOOP_YARN_RM" \
+    --hadoop-enable-node-labels "$HADOOP_ENABLE_NODE_LABELS"
+else
+  "$ROOT_DIR/scripts/run.sh" compare \
+    --workflow "$WORKFLOW" \
+    --workspace "$WORKSPACE" \
+    --data-root "$DATA_ROOT" \
+    --cluster-config "$CLUSTER_CONFIG" \
+    --rounds "$COMPARE_ROUNDS" \
+    --max-nodes "$MAX_NODES" \
+    --training-warmup-runs "$TRAINING_WARMUP_RUNS" \
+    --training-measure-runs "$TRAINING_MEASURE_RUNS" \
+    --executor "$EXECUTOR" \
+    --docker-image "$DOCKER_IMAGE"
+fi
 
 echo "Benchmark outputs:"
 echo "  $WORKSPACE/comparison.md"
@@ -180,6 +222,13 @@ echo "  $EXECUTOR"
 if [[ "$EXECUTOR" == "docker" ]]; then
   echo "Docker image:"
   echo "  $DOCKER_IMAGE"
+elif [[ "$EXECUTOR" == "hadoop" ]]; then
+  echo "Docker Hadoop image:"
+  echo "  $HADOOP_CLUSTER_IMAGE"
+  echo "Hadoop host conf:"
+  echo "  $HADOOP_CLUSTER_WORKDIR/host-conf"
+  echo "Keep cluster after run:"
+  echo "  $HADOOP_KEEP_CLUSTER"
 fi
 if [[ "$MAX_NODES" != "0" ]]; then
   echo "Node limit:"
