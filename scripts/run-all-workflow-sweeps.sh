@@ -3,15 +3,35 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-PROFILE="${PROFILE:-medium}"
-WORKFLOWS="${WORKFLOWS:-gene2life avianflu_small epigenomics}"
+SUBMISSION_MODE="${SUBMISSION_MODE:-true}"
+FULL_SWEEP="${FULL_SWEEP:-false}"
+if [[ "$FULL_SWEEP" == "true" ]]; then
+  SUBMISSION_MODE="false"
+fi
+DEFAULT_PROFILE="medium"
+DEFAULT_COMPARE_ROUNDS="4"
+DEFAULT_TRAINING_WARMUP_RUNS="1"
+DEFAULT_TRAINING_MEASURE_RUNS="3"
+if [[ "$SUBMISSION_MODE" == "true" ]]; then
+  DEFAULT_PROFILE="small"
+  DEFAULT_COMPARE_ROUNDS="1"
+  DEFAULT_TRAINING_WARMUP_RUNS="0"
+  DEFAULT_TRAINING_MEASURE_RUNS="1"
+fi
+
+PROFILE="${PROFILE:-$DEFAULT_PROFILE}"
+DEFAULT_WORKFLOWS="gene2life avianflu_small epigenomics"
+if [[ "$SUBMISSION_MODE" == "true" ]]; then
+  DEFAULT_WORKFLOWS="gene2life avianflu_small"
+fi
+WORKFLOWS="${WORKFLOWS:-$DEFAULT_WORKFLOWS}"
 NODE_COUNTS="${NODE_COUNTS:-2 4 12 28}"
 PAPER_CLUSTER_CONFIG="${PAPER_CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.csv}"
 DENSE_CLUSTER_CONFIG="${DENSE_CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-dense-28.csv}"
 CLUSTER_CONFIG="${CLUSTER_CONFIG:-}"
-COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
-TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
-TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
+COMPARE_ROUNDS="${COMPARE_ROUNDS:-$DEFAULT_COMPARE_ROUNDS}"
+TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-$DEFAULT_TRAINING_WARMUP_RUNS}"
+TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-$DEFAULT_TRAINING_MEASURE_RUNS}"
 EXECUTOR="${EXECUTOR:-hadoop}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
 HADOOP_CLUSTER_IMAGE="${HADOOP_CLUSTER_IMAGE:-gene2life-hadoop-cluster:3.4.3}"
@@ -27,6 +47,9 @@ HADOOP_CLUSTER_WORKDIR="${HADOOP_CLUSTER_WORKDIR:-$ROOT_DIR/work/hadoop-docker-c
 mkdir -p "$BASE_WORK_DIR" "$LOG_DIR" "$DATASET_BASE_DIR"
 
 MASTER_LOG="$LOG_DIR/master-$(date '+%Y%m%d-%H%M%S').log"
+CURRENT_RUN_FILE="$LOG_DIR/current-run.txt"
+COMPLETED_RUNS_FILE="$LOG_DIR/completed-runs.txt"
+FAILED_RUN_FILE="$LOG_DIR/failed-run.txt"
 
 timestamp() {
   date '+%F %T'
@@ -37,6 +60,7 @@ log() {
 }
 
 cleanup_runtime() {
+  rm -f "$CURRENT_RUN_FILE"
   if [[ "$EXECUTOR" == "hadoop" && "$RUN_ALL_KEEP_CLUSTER" != "true" ]]; then
     log "Cleaning up project Docker Hadoop cluster after sweep"
     HADOOP_CLUSTER_WORKDIR="$HADOOP_CLUSTER_WORKDIR" \
@@ -72,6 +96,10 @@ log "REUSE_DATA=$REUSE_DATA"
 log "BASE_WORK_DIR=$BASE_WORK_DIR"
 log "LOG_DIR=$LOG_DIR"
 log "RUN_ALL_KEEP_CLUSTER=$RUN_ALL_KEEP_CLUSTER"
+log "SUBMISSION_MODE=$SUBMISSION_MODE"
+
+: > "$COMPLETED_RUNS_FILE"
+rm -f "$FAILED_RUN_FILE" "$CURRENT_RUN_FILE"
 
 if [[ "$SKIP_PREBUILD" != "true" ]]; then
   log "Building classes once before the sweep"
@@ -112,6 +140,7 @@ for workflow in $WORKFLOWS; do
 
     log "Starting $run_name"
     log "Using cluster config $cluster_config"
+    printf '%s\n' "$run_name" > "$CURRENT_RUN_FILE"
 
     if ! run_with_timestamped_log "$logfile" env \
       WORKSPACE="$workspace" \
@@ -130,13 +159,17 @@ for workflow in $WORKFLOWS; do
       DOCKER_IMAGE="$DOCKER_IMAGE" \
       HADOOP_CLUSTER_IMAGE="$HADOOP_CLUSTER_IMAGE" \
       GENE2LIFE_JAVA_OPTS="$GENE2LIFE_JAVA_OPTS" \
+      SUBMISSION_MODE="$SUBMISSION_MODE" \
       "$ROOT_DIR/scripts/server-benchmark.sh"; then
       log "FAILED $run_name"
+      printf '%s\n' "$run_name" > "$FAILED_RUN_FILE"
       exit 1
     fi
 
     log "Completed $run_name"
     log "Comparison report: $workspace/comparison.md"
+    printf '%s\n' "$run_name" >> "$COMPLETED_RUNS_FILE"
+    rm -f "$CURRENT_RUN_FILE"
   done
 done
 

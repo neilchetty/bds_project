@@ -196,9 +196,22 @@ CLUSTER_CONFIG=./config/clusters-z4-g5-paper-sweep.csv \
 
 If you use `scripts/server-benchmark.sh` with `EXECUTOR=hadoop`, step 7 is automatic unless `HADOOP_KEEP_CLUSTER=true`.
 
-## Unattended Overnight Run
+## Submission Run
 
-Use `./runner.sh` when you want to start the full build, validation, sweep, reporting, and cleanup flow and then disconnect from the server.
+Use `./runner.sh` for the reliable submission-oriented path. It now defaults to a finish-today preset instead of the older multi-round overnight sweep.
+
+Default submission preset:
+
+- `EXECUTOR=hadoop`
+- `WORKFLOWS="gene2life avianflu_small"`
+- `NODE_COUNTS="2 4 12 28"`
+- `PROFILE=small`
+- `COMPARE_ROUNDS=1`
+- `TRAINING_WARMUP_RUNS=0`
+- `TRAINING_MEASURE_RUNS=1`
+- cleanup of repo-owned Docker runtime on exit unless `HADOOP_KEEP_CLUSTER=true`
+
+Set `FULL_SWEEP=true` if you want the older slower research-style defaults (`PROFILE=medium`, `COMPARE_ROUNDS=4`, more training samples).
 
 1. Stop any host Hadoop services you do not want running in parallel. The repo does not manage host Hadoop daemons for you.
 2. Start the unattended run.
@@ -207,23 +220,18 @@ Use `./runner.sh` when you want to start the full build, validation, sweep, repo
 ./runner.sh
 ```
 
-3. Optionally watch the live console log.
+3. Watch the live console or summary if needed.
 
 ```bash
 tail -f work/overnight-run-*/runner-console.log
+./scripts/submission-status.sh
 ```
 
-The unattended flow runs, in order:
+The submission flow runs, in order:
 
 - system and environment capture
-- `./scripts/build.sh`
-- `./scripts/build-image.sh gene2life-java:latest`
-- `./scripts/build-hadoop-cluster-image.sh gene2life-hadoop-cluster:3.4.3`
-- Docker CPU-pinning validation for the 12-node and 28-node configs
-- `./scripts/hadoop-docker-cluster.sh up`
-- `./scripts/hadoop-docker-cluster.sh health`
-- `./scripts/hadoop-docker-cluster.sh validate`
-- the full `2 4 12 28` Hadoop sweep across `gene2life`, `avianflu_small`, and `epigenomics`
+- `./scripts/submission-preflight.sh`
+- the `2 4 12 28` Hadoop sweep across `gene2life` and `avianflu_small`
 - HTML, PDF, text, and summary report generation
 - cleanup of repo-owned Docker runtime unless `HADOOP_KEEP_CLUSTER=true`
 
@@ -242,6 +250,7 @@ Important outputs inside that directory:
 - `run.env`
 - `workspaces/` with all workflow and node-count benchmark outputs
 - `sweep-logs/` with per-run logs
+- `preflight/` with the preflight log and smoke workspace
 
 `./commands.sh` is the direct foreground version of the same flow. It accepts an optional session directory path:
 
@@ -252,11 +261,31 @@ Important outputs inside that directory:
 
 If `wkhtmltopdf` is not installed, the unattended run still succeeds and writes the HTML and text reports.
 
-## Benchmark Commands
-
-Default paper-style benchmark:
+Use the status helper at any time during a live run:
 
 ```bash
+./scripts/submission-status.sh
+./scripts/submission-status.sh /absolute/path/to/work/overnight-run-<timestamp>
+```
+
+It reports the current matrix item, completed comparisons, repo-owned processes, Docker CPU usage, and active YARN applications.
+
+## Benchmark Commands
+
+Default manual benchmark:
+
+```bash
+./scripts/server-benchmark.sh
+```
+
+Reliable submission-oriented manual benchmark:
+
+```bash
+EXECUTOR=hadoop \
+PROFILE=small \
+COMPARE_ROUNDS=1 \
+TRAINING_WARMUP_RUNS=0 \
+TRAINING_MEASURE_RUNS=1 \
 ./scripts/server-benchmark.sh
 ```
 
@@ -308,13 +337,14 @@ EXECUTOR=hadoop \
 Full overnight sweep for all three workflows with automatic `2 4 12 28` config selection:
 
 ```bash
-./scripts/run-all-workflow-sweeps.sh
+FULL_SWEEP=true ./scripts/run-all-workflow-sweeps.sh
 ```
 
 The sweep wrapper now defaults to:
 
 - `EXECUTOR=hadoop`
-- workflows `gene2life avianflu_small epigenomics`
+- workflows `gene2life avianflu_small` in submission mode
+- workflows `gene2life avianflu_small epigenomics` in full-sweep mode
 - node counts `2 4 12 28`
 - paper profile for `2`, `4`, and `12`
 - dense 28-node profile for `28`

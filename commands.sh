@@ -14,12 +14,32 @@ ENV_SNAPSHOT="$SESSION_DIR/run.env"
 BASE_WORK_DIR="${BASE_WORK_DIR:-$SESSION_DIR/workspaces}"
 LOG_DIR="${LOG_DIR:-$SESSION_DIR/sweep-logs}"
 HADOOP_CLUSTER_WORKDIR="${HADOOP_CLUSTER_WORKDIR:-$SESSION_DIR/hadoop-docker-cluster}"
-PROFILE="${PROFILE:-medium}"
-WORKFLOWS="${WORKFLOWS:-gene2life avianflu_small epigenomics}"
+PREFLIGHT_DIR="${PREFLIGHT_DIR:-$SESSION_DIR/preflight}"
+SUBMISSION_MODE="${SUBMISSION_MODE:-true}"
+FULL_SWEEP="${FULL_SWEEP:-false}"
+if [[ "$FULL_SWEEP" == "true" ]]; then
+  SUBMISSION_MODE="false"
+fi
+DEFAULT_PROFILE="medium"
+DEFAULT_COMPARE_ROUNDS="4"
+DEFAULT_TRAINING_WARMUP_RUNS="1"
+DEFAULT_TRAINING_MEASURE_RUNS="3"
+if [[ "$SUBMISSION_MODE" == "true" ]]; then
+  DEFAULT_PROFILE="small"
+  DEFAULT_COMPARE_ROUNDS="1"
+  DEFAULT_TRAINING_WARMUP_RUNS="0"
+  DEFAULT_TRAINING_MEASURE_RUNS="1"
+fi
+PROFILE="${PROFILE:-$DEFAULT_PROFILE}"
+DEFAULT_WORKFLOWS="gene2life avianflu_small epigenomics"
+if [[ "$SUBMISSION_MODE" == "true" ]]; then
+  DEFAULT_WORKFLOWS="gene2life avianflu_small"
+fi
+WORKFLOWS="${WORKFLOWS:-$DEFAULT_WORKFLOWS}"
 NODE_COUNTS="${NODE_COUNTS:-2 4 12 28}"
-COMPARE_ROUNDS="${COMPARE_ROUNDS:-4}"
-TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-1}"
-TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-3}"
+COMPARE_ROUNDS="${COMPARE_ROUNDS:-$DEFAULT_COMPARE_ROUNDS}"
+TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-$DEFAULT_TRAINING_WARMUP_RUNS}"
+TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-$DEFAULT_TRAINING_MEASURE_RUNS}"
 EXECUTOR="${EXECUTOR:-hadoop}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
 HADOOP_CLUSTER_IMAGE="${HADOOP_CLUSTER_IMAGE:-gene2life-hadoop-cluster:3.4.3}"
@@ -29,12 +49,13 @@ GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxG
 export BASE_WORK_DIR LOG_DIR HADOOP_CLUSTER_WORKDIR PROFILE WORKFLOWS NODE_COUNTS
 export COMPARE_ROUNDS TRAINING_WARMUP_RUNS TRAINING_MEASURE_RUNS EXECUTOR DOCKER_IMAGE
 export HADOOP_CLUSTER_IMAGE PAPER_CLUSTER_CONFIG DENSE_CLUSTER_CONFIG GENE2LIFE_JAVA_OPTS
+export PREFLIGHT_DIR SUBMISSION_MODE FULL_SWEEP
 export SKIP_PREBUILD=true
 export HADOOP_KEEP_CLUSTER="${HADOOP_KEEP_CLUSTER:-false}"
 export RUN_ALL_KEEP_CLUSTER="$HADOOP_KEEP_CLUSTER"
 export HADOOP_CLUSTER_WARMUP_ON_START="${HADOOP_CLUSTER_WARMUP_ON_START:-false}"
 
-mkdir -p "$SESSION_DIR" "$BASE_WORK_DIR" "$LOG_DIR"
+mkdir -p "$SESSION_DIR" "$BASE_WORK_DIR" "$LOG_DIR" "$PREFLIGHT_DIR"
 touch "$TRANSCRIPT"
 exec > >(tee -a "$TRANSCRIPT") 2>&1
 
@@ -60,38 +81,47 @@ run_shell() {
   bash -lc "$*"
 }
 
+write_env_entry() {
+  local key="$1"
+  local value="$2"
+  printf '%s=%q\n' "$key" "$value"
+}
+
 render_report() {
   local status="$1"
   local end_ts="$2"
 
   {
-    echo "RUN_STATUS=$status"
-    echo "ROOT_DIR=$ROOT_DIR"
-    echo "SESSION_DIR=$SESSION_DIR"
-    echo "TRANSCRIPT=$TRANSCRIPT"
-    echo "REPORT_HTML=$REPORT_HTML"
-    echo "REPORT_PDF=$REPORT_PDF"
-    echo "BASE_WORK_DIR=$BASE_WORK_DIR"
-    echo "LOG_DIR=$LOG_DIR"
-    echo "HADOOP_CLUSTER_WORKDIR=$HADOOP_CLUSTER_WORKDIR"
-    echo "PROFILE=$PROFILE"
-    echo "WORKFLOWS=$WORKFLOWS"
-    echo "NODE_COUNTS=$NODE_COUNTS"
-    echo "COMPARE_ROUNDS=$COMPARE_ROUNDS"
-    echo "TRAINING_WARMUP_RUNS=$TRAINING_WARMUP_RUNS"
-    echo "TRAINING_MEASURE_RUNS=$TRAINING_MEASURE_RUNS"
-    echo "EXECUTOR=$EXECUTOR"
-    echo "DOCKER_IMAGE=$DOCKER_IMAGE"
-    echo "HADOOP_CLUSTER_IMAGE=$HADOOP_CLUSTER_IMAGE"
-    echo "PAPER_CLUSTER_CONFIG=$PAPER_CLUSTER_CONFIG"
-    echo "DENSE_CLUSTER_CONFIG=$DENSE_CLUSTER_CONFIG"
-    echo "GENE2LIFE_JAVA_OPTS=$GENE2LIFE_JAVA_OPTS"
-    echo "START_TS=$RUN_TS"
-    echo "END_TS=$end_ts"
-    echo "LAST_COMMAND=$LAST_COMMAND"
+    write_env_entry "RUN_STATUS" "$status"
+    write_env_entry "ROOT_DIR" "$ROOT_DIR"
+    write_env_entry "SESSION_DIR" "$SESSION_DIR"
+    write_env_entry "TRANSCRIPT" "$TRANSCRIPT"
+    write_env_entry "REPORT_HTML" "$REPORT_HTML"
+    write_env_entry "REPORT_PDF" "$REPORT_PDF"
+    write_env_entry "BASE_WORK_DIR" "$BASE_WORK_DIR"
+    write_env_entry "LOG_DIR" "$LOG_DIR"
+    write_env_entry "HADOOP_CLUSTER_WORKDIR" "$HADOOP_CLUSTER_WORKDIR"
+    write_env_entry "PREFLIGHT_DIR" "$PREFLIGHT_DIR"
+    write_env_entry "SUBMISSION_MODE" "$SUBMISSION_MODE"
+    write_env_entry "FULL_SWEEP" "$FULL_SWEEP"
+    write_env_entry "PROFILE" "$PROFILE"
+    write_env_entry "WORKFLOWS" "$WORKFLOWS"
+    write_env_entry "NODE_COUNTS" "$NODE_COUNTS"
+    write_env_entry "COMPARE_ROUNDS" "$COMPARE_ROUNDS"
+    write_env_entry "TRAINING_WARMUP_RUNS" "$TRAINING_WARMUP_RUNS"
+    write_env_entry "TRAINING_MEASURE_RUNS" "$TRAINING_MEASURE_RUNS"
+    write_env_entry "EXECUTOR" "$EXECUTOR"
+    write_env_entry "DOCKER_IMAGE" "$DOCKER_IMAGE"
+    write_env_entry "HADOOP_CLUSTER_IMAGE" "$HADOOP_CLUSTER_IMAGE"
+    write_env_entry "PAPER_CLUSTER_CONFIG" "$PAPER_CLUSTER_CONFIG"
+    write_env_entry "DENSE_CLUSTER_CONFIG" "$DENSE_CLUSTER_CONFIG"
+    write_env_entry "GENE2LIFE_JAVA_OPTS" "$GENE2LIFE_JAVA_OPTS"
+    write_env_entry "START_TS" "$RUN_TS"
+    write_env_entry "END_TS" "$end_ts"
+    write_env_entry "LAST_COMMAND" "$LAST_COMMAND"
   } > "$ENV_SNAPSHOT"
 
-  python3 - "$SESSION_DIR" "$BASE_WORK_DIR" "$TRANSCRIPT" "$REPORT_HTML" "$RESULT_SUMMARY" "$status" "$RUN_TS" "$end_ts" <<'PY'
+  python3 - "$SESSION_DIR" "$BASE_WORK_DIR" "$LOG_DIR" "$TRANSCRIPT" "$REPORT_HTML" "$RESULT_SUMMARY" "$status" "$RUN_TS" "$end_ts" "$WORKFLOWS" "$NODE_COUNTS" <<'PY'
 import html
 import pathlib
 import re
@@ -99,12 +129,15 @@ import sys
 
 session_dir = pathlib.Path(sys.argv[1])
 base_work_dir = pathlib.Path(sys.argv[2])
-transcript_path = pathlib.Path(sys.argv[3])
-report_html = pathlib.Path(sys.argv[4])
-result_summary = pathlib.Path(sys.argv[5])
-status = sys.argv[6]
-start_ts = sys.argv[7]
-end_ts = sys.argv[8]
+log_dir = pathlib.Path(sys.argv[3])
+transcript_path = pathlib.Path(sys.argv[4])
+report_html = pathlib.Path(sys.argv[5])
+result_summary = pathlib.Path(sys.argv[6])
+status = sys.argv[7]
+start_ts = sys.argv[8]
+end_ts = sys.argv[9]
+workflows = [value for value in sys.argv[10].split() if value]
+node_counts = [value for value in sys.argv[11].split() if value]
 
 def read_text(path: pathlib.Path) -> str:
     if not path.exists():
@@ -112,17 +145,42 @@ def read_text(path: pathlib.Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 comparison_blocks = []
+comparison_by_name = {}
 summary_lines = []
 for comparison in sorted(base_work_dir.glob("*/comparison.md")):
     content = read_text(comparison)
     comparison_blocks.append((comparison.parent.name, comparison, content))
+    comparison_by_name[comparison.parent.name] = (comparison, content)
     match = re.search(r"WSH makespan improvement over HEFT: ([\-0-9.]+)%", content)
     improvement = match.group(1) if match else "n/a"
-    summary_lines.append(f"{comparison.parent.name}: WSH improvement {improvement}%")
-
-result_summary.write_text("\n".join(summary_lines) + ("\n" if summary_lines else ""), encoding="utf-8")
+    summary_lines.append(f"{comparison.parent.name}: COMPLETED, WSH improvement {improvement}%")
 
 transcript = read_text(transcript_path)
+started = set(re.findall(r"Starting ([A-Za-z0-9_-]+)", transcript))
+completed = set(re.findall(r"Completed ([A-Za-z0-9_-]+)", transcript))
+failed = set(re.findall(r"FAILED ([A-Za-z0-9_-]+)", transcript))
+current_run_path = log_dir / "current-run.txt"
+current_run = read_text(current_run_path).strip() if current_run_path.exists() else ""
+matrix_lines = []
+for workflow in workflows:
+    for node_count in node_counts:
+        run_name = f"{workflow}-nodes-{node_count}"
+        if run_name in comparison_by_name:
+            comparison_path, content = comparison_by_name[run_name]
+            match = re.search(r"WSH makespan improvement over HEFT: ([\-0-9.]+)%", content)
+            improvement = match.group(1) if match else "n/a"
+            matrix_lines.append(f"{run_name}: COMPLETED, WSH improvement {improvement}%, report={comparison_path}")
+        elif run_name in failed:
+            matrix_lines.append(f"{run_name}: FAILED")
+        elif current_run == run_name or run_name in started or run_name in completed:
+            matrix_lines.append(f"{run_name}: INCOMPLETE")
+        else:
+            matrix_lines.append(f"{run_name}: NOT_STARTED")
+
+if matrix_lines:
+    summary_lines.extend(["", "Execution matrix:"])
+    summary_lines.extend(matrix_lines)
+result_summary.write_text("\n".join(summary_lines).strip() + "\n", encoding="utf-8")
 
 sections = []
 sections.append(
@@ -138,6 +196,8 @@ sections.append(
 
 if summary_lines:
     sections.append("<h2>Result Summary</h2><pre>" + html.escape("\n".join(summary_lines)) + "</pre>")
+if matrix_lines:
+    sections.append("<h2>Execution Matrix</h2><pre>" + html.escape("\n".join(matrix_lines)) + "</pre>")
 
 sections.append("<h2>Comparison Reports</h2>")
 if comparison_blocks:
@@ -182,7 +242,19 @@ report_html.write_text(
     )
 PY
 
-  cp "$TRANSCRIPT" "$REPORT_TXT"
+  {
+    echo "Overnight Hadoop Sweep Report"
+    echo "Status: $status"
+    echo "Started: $RUN_TS"
+    echo "Finished: $end_ts"
+    echo "Session: $SESSION_DIR"
+    echo
+    cat "$RESULT_SUMMARY"
+    echo
+    echo "Full Transcript"
+    echo "==============="
+    cat "$TRANSCRIPT"
+  } > "$REPORT_TXT"
   if command -v wkhtmltopdf >/dev/null 2>&1; then
     if ! wkhtmltopdf --quiet --orientation Landscape "$REPORT_HTML" "$REPORT_PDF"; then
       log "WARNING: wkhtmltopdf failed; HTML and text reports were still generated"
@@ -222,16 +294,7 @@ main() {
   run_shell "docker info --format '{{.NCPU}} CPUs / {{.MemTotal}} bytes / cgroup={{.CgroupVersion}} / driver={{.Driver}}'"
   run_shell "jps || true"
 
-  run_cmd "$ROOT_DIR/scripts/build.sh"
-  run_cmd "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
-  run_cmd "$ROOT_DIR/scripts/build-hadoop-cluster-image.sh" "$HADOOP_CLUSTER_IMAGE"
-
-  run_cmd "$ROOT_DIR/scripts/validate-docker-node-pinning.sh" "$PAPER_CLUSTER_CONFIG" "$DOCKER_IMAGE"
-  run_cmd "$ROOT_DIR/scripts/validate-docker-node-pinning.sh" "$DENSE_CLUSTER_CONFIG" "$DOCKER_IMAGE"
-
-  run_cmd "$ROOT_DIR/scripts/hadoop-docker-cluster.sh" up "$PAPER_CLUSTER_CONFIG" "$HADOOP_CLUSTER_WORKDIR" "$HADOOP_CLUSTER_IMAGE"
-  run_cmd "$ROOT_DIR/scripts/hadoop-docker-cluster.sh" health "$PAPER_CLUSTER_CONFIG" "$HADOOP_CLUSTER_WORKDIR" "$HADOOP_CLUSTER_IMAGE"
-  run_cmd "$ROOT_DIR/scripts/hadoop-docker-cluster.sh" validate "$PAPER_CLUSTER_CONFIG" "$HADOOP_CLUSTER_WORKDIR" "$HADOOP_CLUSTER_IMAGE"
+  run_cmd "$ROOT_DIR/scripts/submission-preflight.sh" "$PREFLIGHT_DIR"
 
   run_cmd "$ROOT_DIR/scripts/run-all-workflow-sweeps.sh"
 
