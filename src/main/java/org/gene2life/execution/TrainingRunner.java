@@ -1,6 +1,7 @@
 package org.gene2life.execution;
 
 import org.gene2life.hadoop.HadoopJobRunner;
+import org.gene2life.hadoop.HdfsDockerJobRunner;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.NodeProfile;
@@ -19,13 +20,14 @@ import java.util.List;
 import java.util.Map;
 
 public final class TrainingRunner {
-    private static final long MEASUREMENT_NOISE_FLOOR_MS = 2_000L;
+    private static final long MEASUREMENT_NOISE_FLOOR_MS = 50L;
 
     private final WorkflowSpec workflowSpec;
     private final Map<String, TaskExecutor> executors;
     private final ExecutionMode executionMode;
     private final DockerNodePool dockerNodePool;
     private final HadoopJobRunner hadoopJobRunner;
+    private final HdfsDockerJobRunner hdfsDockerJobRunner;
     private final int warmupRuns;
     private final int measurementRuns;
 
@@ -35,6 +37,7 @@ public final class TrainingRunner {
             ExecutionMode executionMode,
             DockerNodePool dockerNodePool,
             HadoopJobRunner hadoopJobRunner,
+            HdfsDockerJobRunner hdfsDockerJobRunner,
             int warmupRuns,
             int measurementRuns) {
         this.workflowSpec = workflowSpec;
@@ -42,6 +45,7 @@ public final class TrainingRunner {
         this.executionMode = executionMode;
         this.dockerNodePool = dockerNodePool;
         this.hadoopJobRunner = hadoopJobRunner;
+        this.hdfsDockerJobRunner = hdfsDockerJobRunner;
         this.warmupRuns = Math.max(0, warmupRuns);
         this.measurementRuns = Math.max(1, measurementRuns);
     }
@@ -85,6 +89,12 @@ public final class TrainingRunner {
                 }
                 yield hadoopJobRunner.executeTrainingJob(workflowSpec, jobId, node, dataRoot);
             }
+            case HDFS_DOCKER -> {
+                if (hdfsDockerJobRunner == null) {
+                    throw new IllegalStateException("HDFS Docker executor selected without HDFS Docker job runner");
+                }
+                yield hdfsDockerJobRunner.executeTrainingJob(workflowSpec, jobId, node, dataRoot);
+            }
         };
     }
 
@@ -125,7 +135,7 @@ public final class TrainingRunner {
         }
         long absoluteSpread = Math.abs(maxDuration - minDuration);
         double relativeSpread = (double) absoluteSpread / minDuration;
-        if (absoluteSpread <= 250L || relativeSpread <= 0.12) {
+        if (absoluteSpread <= 25L || relativeSpread <= 0.12) {
             return "io";
         }
         return defaultClassification;

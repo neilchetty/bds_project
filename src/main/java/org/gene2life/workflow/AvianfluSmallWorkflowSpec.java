@@ -19,12 +19,22 @@ import java.util.Random;
 import java.util.concurrent.Future;
 
 public final class AvianfluSmallWorkflowSpec implements WorkflowSpec {
-    private static final int DEFAULT_DOCKING_TASKS = 100;
-    private static final WorkflowDefinition DEFINITION = buildDefinition(DEFAULT_DOCKING_TASKS);
+    public static final int DEFAULT_DOCKING_TASKS = 100;
+    private final int dockingTasks;
+    private final WorkflowDefinition definition;
+
+    public AvianfluSmallWorkflowSpec() {
+        this(DEFAULT_DOCKING_TASKS);
+    }
+
+    public AvianfluSmallWorkflowSpec(int dockingTasks) {
+        this.dockingTasks = Math.max(1, dockingTasks);
+        this.definition = buildDefinition(this.dockingTasks);
+    }
 
     @Override
     public WorkflowDefinition definition() {
-        return DEFINITION;
+        return definition;
     }
 
     @Override
@@ -32,10 +42,9 @@ public final class AvianfluSmallWorkflowSpec implements WorkflowSpec {
         Files.createDirectories(dataRoot.resolve("ligands"));
         Files.createDirectories(dataRoot.resolve("training/ligands"));
         Random random = new Random(Long.parseLong(cli.option("seed", "42")));
-        int dockingTasks = dockingTaskCount();
         int receptorFeatures = cli.optionInt("receptor-feature-count", 256);
         int ligandAtoms = cli.optionInt("ligand-atom-count", 48);
-        int trainingLigands = Math.max(8, Math.min(16, dockingTasks / 8));
+        int trainingLigands = Math.max(1, Math.min(dockingTasks, Math.max(8, Math.min(16, dockingTasks / 8))));
 
         try (BufferedWriter writer = Files.newBufferedWriter(dataRoot.resolve("receptor.tsv"), StandardCharsets.UTF_8)) {
             writer.write("feature_id\tx\ty\tz\tweight");
@@ -215,8 +224,9 @@ public final class AvianfluSmallWorkflowSpec implements WorkflowSpec {
         return new WorkflowDefinition("avianflu_small", "Avianflu_small", jobs);
     }
 
-    private int dockingTaskCount() {
-        return (int) DEFINITION.jobs().stream().filter(job -> job.taskType() == TaskType.AUTODOCK).count();
+    @Override
+    public Map<String, String> variantOptions() {
+        return Map.of("avianflu-autodock-count", Integer.toString(dockingTasks));
     }
 
     private static void copyLigandLibrarySubset(Path input, Path output, int rows) throws Exception {

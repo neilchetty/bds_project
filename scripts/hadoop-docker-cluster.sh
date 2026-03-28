@@ -119,7 +119,7 @@ wait_for_health() {
   local total_nodes
   total_nodes="$(expected_yarn_nodes)"
   for _ in $(seq 1 90); do
-    if timeout 30s docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" exec -T master bash -lc "hdfs dfsadmin -safemode wait >/tmp/hdfs-safemode.txt 2>/tmp/hdfs-safemode.err && hdfs dfsadmin -report >/tmp/hdfs-report.txt 2>/tmp/hdfs-report.err && yarn node -list >/tmp/yarn-nodes.txt 2>/tmp/yarn-nodes.err"; then
+    if compose exec -T master bash -lc "timeout 25s sh -lc 'hdfs dfsadmin -safemode wait >/tmp/hdfs-safemode.txt 2>/tmp/hdfs-safemode.err && hdfs dfsadmin -report >/tmp/hdfs-report.txt 2>/tmp/hdfs-report.err && yarn node -list >/tmp/yarn-nodes.txt 2>/tmp/yarn-nodes.err'"; then
       local current_nodes
       current_nodes="$(compose exec -T master bash -lc "awk -F: '/Total Nodes/ {gsub(/ /, \"\", \$2); print \$2}' /tmp/yarn-nodes.txt" | tr -d '\r')"
       if [[ "$current_nodes" == "$total_nodes" ]]; then

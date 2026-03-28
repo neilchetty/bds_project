@@ -8,31 +8,28 @@ FULL_SWEEP="${FULL_SWEEP:-false}"
 if [[ "$FULL_SWEEP" == "true" ]]; then
   SUBMISSION_MODE="false"
 fi
-DEFAULT_PROFILE="medium"
-DEFAULT_COMPARE_ROUNDS="4"
+DEFAULT_PROFILE="small"
+DEFAULT_COMPARE_ROUNDS="3"
 DEFAULT_TRAINING_WARMUP_RUNS="1"
 DEFAULT_TRAINING_MEASURE_RUNS="3"
-if [[ "$SUBMISSION_MODE" == "true" ]]; then
-  DEFAULT_PROFILE="small"
-  DEFAULT_COMPARE_ROUNDS="1"
-  DEFAULT_TRAINING_WARMUP_RUNS="0"
-  DEFAULT_TRAINING_MEASURE_RUNS="1"
+if [[ "$FULL_SWEEP" == "true" ]]; then
+  DEFAULT_PROFILE="medium"
+  DEFAULT_COMPARE_ROUNDS="3"
+  DEFAULT_TRAINING_WARMUP_RUNS="1"
+  DEFAULT_TRAINING_MEASURE_RUNS="3"
 fi
 
 PROFILE="${PROFILE:-$DEFAULT_PROFILE}"
 DEFAULT_WORKFLOWS="gene2life avianflu_small epigenomics"
-if [[ "$SUBMISSION_MODE" == "true" ]]; then
-  DEFAULT_WORKFLOWS="gene2life avianflu_small"
-fi
 WORKFLOWS="${WORKFLOWS:-$DEFAULT_WORKFLOWS}"
-NODE_COUNTS="${NODE_COUNTS:-2 4 12 28}"
+NODE_COUNTS="${NODE_COUNTS:-4 7 10 13}"
 PAPER_CLUSTER_CONFIG="${PAPER_CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.csv}"
 DENSE_CLUSTER_CONFIG="${DENSE_CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-dense-28.csv}"
 CLUSTER_CONFIG="${CLUSTER_CONFIG:-}"
 COMPARE_ROUNDS="${COMPARE_ROUNDS:-$DEFAULT_COMPARE_ROUNDS}"
 TRAINING_WARMUP_RUNS="${TRAINING_WARMUP_RUNS:-$DEFAULT_TRAINING_WARMUP_RUNS}"
 TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-$DEFAULT_TRAINING_MEASURE_RUNS}"
-EXECUTOR="${EXECUTOR:-hadoop}"
+EXECUTOR="${EXECUTOR:-hdfs-docker}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
 HADOOP_CLUSTER_IMAGE="${HADOOP_CLUSTER_IMAGE:-gene2life-hadoop-cluster:3.4.3}"
 GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication}"
@@ -61,12 +58,12 @@ log() {
 
 cleanup_runtime() {
   rm -f "$CURRENT_RUN_FILE"
-  if [[ "$EXECUTOR" == "hadoop" && "$RUN_ALL_KEEP_CLUSTER" != "true" ]]; then
+  if [[ ("$EXECUTOR" == "hadoop" || "$EXECUTOR" == "hdfs-docker") && "$RUN_ALL_KEEP_CLUSTER" != "true" ]]; then
     log "Cleaning up project Docker Hadoop cluster after sweep"
     HADOOP_CLUSTER_WORKDIR="$HADOOP_CLUSTER_WORKDIR" \
       HADOOP_CLUSTER_IMAGE="$HADOOP_CLUSTER_IMAGE" \
       CLUSTER_CONFIG="$PAPER_CLUSTER_CONFIG" \
-      "$ROOT_DIR/scripts/cleanup-project-runtime.sh" hadoop-cluster || true
+      "$ROOT_DIR/scripts/cleanup-project-runtime.sh" all || true
   fi
 }
 
@@ -108,7 +105,7 @@ if [[ "$SKIP_PREBUILD" != "true" ]]; then
   if [[ "$EXECUTOR" == "docker" ]]; then
     log "Building Docker image once before the sweep"
     run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
-  elif [[ "$EXECUTOR" == "hadoop" ]]; then
+  elif [[ "$EXECUTOR" == "hadoop" || "$EXECUTOR" == "hdfs-docker" ]]; then
     log "Building Docker Hadoop cluster image once before the sweep"
     run_with_timestamped_log "$MASTER_LOG" "$ROOT_DIR/scripts/build-hadoop-cluster-image.sh" "$HADOOP_CLUSTER_IMAGE"
   fi
@@ -122,10 +119,10 @@ cluster_config_for_nodes() {
     printf '%s\n' "$CLUSTER_CONFIG"
     return
   fi
-  if (( nodes <= 12 )); then
-    printf '%s\n' "$PAPER_CLUSTER_CONFIG"
-  else
+  if (( nodes > 13 )); then
     printf '%s\n' "$DENSE_CLUSTER_CONFIG"
+  else
+    printf '%s\n' "$PAPER_CLUSTER_CONFIG"
   fi
 }
 

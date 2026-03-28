@@ -39,6 +39,7 @@ public final class HadoopTaskJob {
     public static final String CONF_IO_BUFFER_KB = "gene2life.hadoop.node.ioBufferKb";
     public static final String CONF_MEMORY_MB = "gene2life.hadoop.node.memoryMb";
     public static final String CONF_PARAM_COUNT = "gene2life.hadoop.param.count";
+    public static final String CONF_WORKFLOW_OPTION_COUNT = "gene2life.hadoop.workflow.option.count";
 
     private HadoopTaskJob() {
     }
@@ -70,6 +71,12 @@ public final class HadoopTaskJob {
             configuration.set(paramKey(paramIndex), entry.getKey() + "=" + entry.getValue());
             paramIndex++;
         }
+        configuration.setInt(CONF_WORKFLOW_OPTION_COUNT, workflowSpec.variantOptions().size());
+        int workflowOptionIndex = 0;
+        for (Map.Entry<String, String> entry : workflowSpec.variantOptions().entrySet()) {
+            configuration.set(workflowOptionKey(workflowOptionIndex), entry.getKey() + "=" + entry.getValue());
+            workflowOptionIndex++;
+        }
     }
 
     public static Job createJob(Configuration configuration, String jobName, String controlInputPath) throws IOException {
@@ -93,11 +100,17 @@ public final class HadoopTaskJob {
         return "gene2life.hadoop.param." + index;
     }
 
+    private static String workflowOptionKey(int index) {
+        return "gene2life.hadoop.workflow.option." + index;
+    }
+
     public static final class TaskMapper extends Mapper<LongWritable, Text, NullWritable, Text> {
         @Override
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             Configuration configuration = context.getConfiguration();
-            WorkflowSpec workflowSpec = WorkflowRegistry.byId(configuration.get(CONF_WORKFLOW));
+            WorkflowSpec workflowSpec = WorkflowRegistry.byId(
+                    configuration.get(CONF_WORKFLOW),
+                    readParameters(configuration, CONF_WORKFLOW_OPTION_COUNT, HadoopTaskJob::workflowOptionKey));
             String jobId = configuration.get(CONF_JOB_ID);
             NodeProfile nodeProfile = new NodeProfile(
                     configuration.get(CONF_CLUSTER_ID),
@@ -117,7 +130,10 @@ public final class HadoopTaskJob {
                     }
                     java.nio.file.Path localOutputDir = workDir.resolve("output");
                     Files.createDirectories(localOutputDir);
-                    TaskInputs taskInputs = new TaskInputs(localInputs, localOutputDir, readParameters(configuration));
+                    TaskInputs taskInputs = new TaskInputs(
+                            localInputs,
+                            localOutputDir,
+                            readParameters(configuration, CONF_PARAM_COUNT, HadoopTaskJob::paramKey));
                     TaskExecutor executor = workflowSpec.executors().get(jobId);
                     if (executor == null) {
                         throw new IllegalArgumentException("Unknown workflow job: " + workflowSpec.workflowId() + "/" + jobId);
@@ -139,11 +155,14 @@ public final class HadoopTaskJob {
             }
         }
 
-        private static Map<String, String> readParameters(Configuration configuration) {
-            int count = configuration.getInt(CONF_PARAM_COUNT, 0);
+        private static Map<String, String> readParameters(
+                Configuration configuration,
+                String countKey,
+                java.util.function.IntFunction<String> keyFactory) {
+            int count = configuration.getInt(countKey, 0);
             Map<String, String> parameters = new LinkedHashMap<>();
             for (int index = 0; index < count; index++) {
-                String[] parts = configuration.get(paramKey(index), "").split("=", 2);
+                String[] parts = configuration.get(keyFactory.apply(index), "").split("=", 2);
                 if (parts.length == 2) {
                     parameters.put(parts[0], parts[1]);
                 }

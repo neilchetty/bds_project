@@ -10,6 +10,7 @@ import org.gene2life.execution.WorkflowExecutor;
 import org.gene2life.hadoop.HadoopExecutionConfig;
 import org.gene2life.hadoop.HadoopJobRunner;
 import org.gene2life.hadoop.HadoopSupport;
+import org.gene2life.hadoop.HdfsDockerJobRunner;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobRun;
 import org.gene2life.model.NodeProfile;
@@ -105,6 +106,7 @@ public final class Main {
         Map<String, TaskExecutor> executors = workflowSpec.executors();
         List<ClusterProfile> clusters = ClusterProfiles.limitRoundRobin(ClusterConfigLoader.load(clusterConfig), maxNodes);
         DockerNodePool dockerNodePool = executionMode == ExecutionMode.DOCKER
+                || executionMode == ExecutionMode.HDFS_DOCKER
                 ? new DockerNodePool(
                 dockerImage,
                 commonAncestor(workspace.toAbsolutePath(), dataRoot.toAbsolutePath()),
@@ -113,6 +115,7 @@ public final class Main {
                 : null;
         Path runRoot = workspace.resolve(schedulerName.toLowerCase());
         HadoopExecutionConfig hadoopExecutionConfig = executionMode == ExecutionMode.HADOOP
+                || executionMode == ExecutionMode.HDFS_DOCKER
                 ? buildHadoopExecutionConfig(
                 workflowSpec,
                 workspace,
@@ -125,6 +128,7 @@ public final class Main {
                 hadoopEnableNodeLabels)
                 : null;
         HadoopJobRunner hadoopJobRunner = null;
+        HdfsDockerJobRunner hdfsDockerJobRunner = null;
         if (hadoopExecutionConfig != null) {
             System.out.println("Hadoop execution config:"
                     + " confDir=" + hadoopExecutionConfig.hadoopConfDir()
@@ -132,8 +136,14 @@ public final class Main {
                     + " yarnRm=" + hadoopExecutionConfig.yarnResourceManagerAddress()
                     + " dataRoot=" + hadoopExecutionConfig.normalizedDataRoot()
                     + " workspaceRoot=" + hadoopExecutionConfig.normalizedWorkspaceRoot());
-            hadoopJobRunner = new HadoopJobRunner(new HadoopSupport(hadoopExecutionConfig));
-            hadoopJobRunner.syncDataRoot(dataRoot);
+            HadoopSupport hadoopSupport = new HadoopSupport(hadoopExecutionConfig);
+            if (executionMode == ExecutionMode.HADOOP) {
+                hadoopJobRunner = new HadoopJobRunner(hadoopSupport);
+                hadoopJobRunner.syncDataRoot(dataRoot);
+            } else {
+                hdfsDockerJobRunner = new HdfsDockerJobRunner(dockerNodePool, hadoopSupport);
+                hdfsDockerJobRunner.syncDataRoot(dataRoot);
+            }
         }
         try {
             Scheduler scheduler = scheduler(schedulerName);
@@ -144,6 +154,7 @@ public final class Main {
                     executionMode,
                     dockerNodePool,
                     hadoopJobRunner,
+                    hdfsDockerJobRunner,
                     trainingWarmupRuns,
                     trainingMeasureRuns).benchmark(dataRoot, clusters)
                     : TrainingBenchmarks.empty();
@@ -155,6 +166,7 @@ public final class Main {
                     executionMode,
                     dockerNodePool,
                     hadoopJobRunner,
+                    hdfsDockerJobRunner,
                     hadoopExecutionConfig == null
                             ? ""
                             : hadoopExecutionConfig.normalizedWorkspaceRoot() + "/" + scheduler.name().toLowerCase());
@@ -179,7 +191,7 @@ public final class Main {
         Path workspace = Path.of(cli.option("workspace", "work/compare"));
         Path dataRoot = Path.of(cli.option("data-root", workspace.resolve("data").toString()));
         Path clusterConfig = Path.of(cli.option("cluster-config", "config/clusters-server.csv"));
-        int rounds = cli.optionInt("rounds", 2);
+        int rounds = cli.optionInt("rounds", 3);
         int maxNodes = cli.optionInt("max-nodes", 0);
         ExecutionMode executionMode = ExecutionMode.fromCliValue(cli.option("executor", "local"));
         String dockerImage = cli.option("docker-image", "gene2life-java:latest");
@@ -302,7 +314,7 @@ public final class Main {
     }
 
     private static WorkflowSpec workflowSpec(CliArguments cli) {
-        return WorkflowRegistry.byId(cli.option("workflow", "gene2life"));
+        return WorkflowRegistry.fromCli(cli);
     }
 
     private static Scheduler scheduler(String name) {

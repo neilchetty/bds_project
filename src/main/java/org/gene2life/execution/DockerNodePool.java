@@ -45,6 +45,10 @@ public final class DockerNodePool implements AutoCloseable {
         command.add("run-job");
         command.add("--workflow");
         command.add(workflowSpec.workflowId());
+        for (Map.Entry<String, String> entry : workflowSpec.variantOptions().entrySet()) {
+            command.add("--" + entry.getKey());
+            command.add(entry.getValue());
+        }
         command.add("--job");
         command.add(jobId);
         command.add("--inputs");

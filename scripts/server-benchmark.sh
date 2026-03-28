@@ -10,15 +10,15 @@ FULL_SWEEP="${FULL_SWEEP:-false}"
 if [[ "$FULL_SWEEP" == "true" ]]; then
   SUBMISSION_MODE="false"
 fi
-DEFAULT_PROFILE="medium"
-DEFAULT_COMPARE_ROUNDS="4"
+DEFAULT_PROFILE="small"
+DEFAULT_COMPARE_ROUNDS="3"
 DEFAULT_TRAINING_WARMUP_RUNS="1"
 DEFAULT_TRAINING_MEASURE_RUNS="3"
-if [[ "$SUBMISSION_MODE" == "true" ]]; then
-  DEFAULT_PROFILE="small"
-  DEFAULT_COMPARE_ROUNDS="1"
-  DEFAULT_TRAINING_WARMUP_RUNS="0"
-  DEFAULT_TRAINING_MEASURE_RUNS="1"
+if [[ "$FULL_SWEEP" == "true" ]]; then
+  DEFAULT_PROFILE="medium"
+  DEFAULT_COMPARE_ROUNDS="3"
+  DEFAULT_TRAINING_WARMUP_RUNS="1"
+  DEFAULT_TRAINING_MEASURE_RUNS="3"
 fi
 PROFILE="${PROFILE:-$DEFAULT_PROFILE}"
 CLUSTER_CONFIG="${CLUSTER_CONFIG:-$ROOT_DIR/config/clusters-z4-g5-paper-sweep.csv}"
@@ -26,7 +26,7 @@ GENE2LIFE_JAVA_OPTS="${GENE2LIFE_JAVA_OPTS:--Xms4g -Xmx16g -XX:+UseG1GC -XX:MaxG
 export GENE2LIFE_JAVA_OPTS
 COMPARE_ROUNDS="${COMPARE_ROUNDS:-$DEFAULT_COMPARE_ROUNDS}"
 MAX_NODES="${MAX_NODES:-0}"
-EXECUTOR="${EXECUTOR:-docker}"
+EXECUTOR="${EXECUTOR:-hdfs-docker}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-gene2life-java:latest}"
 HADOOP_CLUSTER_IMAGE="${HADOOP_CLUSTER_IMAGE:-gene2life-hadoop-cluster:3.4.3}"
 HADOOP_CLUSTER_WORKDIR="${HADOOP_CLUSTER_WORKDIR:-$ROOT_DIR/work/hadoop-docker-cluster}"
@@ -44,16 +44,19 @@ TRAINING_MEASURE_RUNS="${TRAINING_MEASURE_RUNS:-$DEFAULT_TRAINING_MEASURE_RUNS}"
 REUSE_DATA="${REUSE_DATA:-true}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 GENERATE_ARGS=()
+COMPARE_EXTRA_ARGS=()
 GENERATION_METADATA_FILE="$DATA_ROOT/.generation-metadata.env"
 
 cleanup_runtime() {
   if [[ "$EXECUTOR" == "docker" ]]; then
     "$ROOT_DIR/scripts/cleanup-project-runtime.sh" docker-nodes
-  elif [[ "$EXECUTOR" == "hadoop" && "$HADOOP_KEEP_CLUSTER" != "true" ]]; then
+  elif [[ ("$EXECUTOR" == "hadoop" || "$EXECUTOR" == "hdfs-docker") && "$HADOOP_KEEP_CLUSTER" != "true" ]]; then
     HADOOP_CLUSTER_WORKDIR="$HADOOP_CLUSTER_WORKDIR" \
       HADOOP_CLUSTER_IMAGE="$HADOOP_CLUSTER_IMAGE" \
       CLUSTER_CONFIG="$CLUSTER_CONFIG" \
       "$ROOT_DIR/scripts/cleanup-project-runtime.sh" all
+  elif [[ "$EXECUTOR" == "hdfs-docker" ]]; then
+    "$ROOT_DIR/scripts/cleanup-project-runtime.sh" docker-nodes
   fi
 }
 
@@ -89,6 +92,7 @@ case "$WORKFLOW" in
     )
     ;;
   avianflu_small)
+    AVIANFLU_AUTODOCK_COUNT="${AVIANFLU_AUTODOCK_COUNT:-100}"
     case "$PROFILE" in
       small)
         RECEPTOR_FEATURE_COUNT="${RECEPTOR_FEATURE_COUNT:-192}"
@@ -108,11 +112,16 @@ case "$WORKFLOW" in
         ;;
     esac
     GENERATE_ARGS=(
+      --avianflu-autodock-count "$AVIANFLU_AUTODOCK_COUNT"
       --receptor-feature-count "$RECEPTOR_FEATURE_COUNT"
       --ligand-atom-count "$LIGAND_ATOM_COUNT"
     )
+    COMPARE_EXTRA_ARGS=(
+      --avianflu-autodock-count "$AVIANFLU_AUTODOCK_COUNT"
+    )
     ;;
   epigenomics)
+    EPIGENOMICS_SPLIT_COUNT="${EPIGENOMICS_SPLIT_COUNT:-24}"
     case "$PROFILE" in
       small)
         READS_PER_SPLIT="${READS_PER_SPLIT:-160}"
@@ -135,9 +144,13 @@ case "$WORKFLOW" in
         ;;
     esac
     GENERATE_ARGS=(
+      --epigenomics-split-count "$EPIGENOMICS_SPLIT_COUNT"
       --reads-per-split "$READS_PER_SPLIT"
       --read-length "$READ_LENGTH"
       --reference-record-count "$REFERENCE_RECORD_COUNT"
+    )
+    COMPARE_EXTRA_ARGS=(
+      --epigenomics-split-count "$EPIGENOMICS_SPLIT_COUNT"
     )
     ;;
   *)
@@ -156,7 +169,7 @@ fi
 
 if [[ "$EXECUTOR" == "docker" ]]; then
   "$ROOT_DIR/scripts/build-image.sh" "$DOCKER_IMAGE"
-elif [[ "$EXECUTOR" == "hadoop" ]]; then
+elif [[ "$EXECUTOR" == "hadoop" || "$EXECUTOR" == "hdfs-docker" ]]; then
   "$ROOT_DIR/scripts/hadoop-docker-cluster.sh" up "$CLUSTER_CONFIG" "$HADOOP_CLUSTER_WORKDIR" "$HADOOP_CLUSTER_IMAGE"
   HADOOP_CONF_DIR="$HADOOP_CLUSTER_WORKDIR/host-conf"
   HADOOP_FS_DEFAULT="hdfs://${HADOOP_DOCKER_ACCESS_HOST}:${HADOOP_DOCKER_NN_PORT}"
@@ -196,7 +209,7 @@ else
   printf '%s\n' "$DESIRED_METADATA" > "$GENERATION_METADATA_FILE"
 fi
 
-if [[ "$EXECUTOR" == "hadoop" ]]; then
+if [[ "$EXECUTOR" == "hadoop" || "$EXECUTOR" == "hdfs-docker" ]]; then
   env \
     HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_CLUSTER_WORKDIR/host-conf}" \
     HADOOP_FS_DEFAULT="$HADOOP_FS_DEFAULT" \
@@ -217,7 +230,8 @@ if [[ "$EXECUTOR" == "hadoop" ]]; then
     --hadoop-fs-default "$HADOOP_FS_DEFAULT" \
     --hadoop-framework-name "$HADOOP_FRAMEWORK_NAME" \
     --hadoop-yarn-rm "$HADOOP_YARN_RM" \
-    --hadoop-enable-node-labels "$HADOOP_ENABLE_NODE_LABELS"
+    --hadoop-enable-node-labels "$HADOOP_ENABLE_NODE_LABELS" \
+    "${COMPARE_EXTRA_ARGS[@]}"
 else
   "$ROOT_DIR/scripts/run.sh" compare \
     --workflow "$WORKFLOW" \
@@ -229,7 +243,8 @@ else
     --training-warmup-runs "$TRAINING_WARMUP_RUNS" \
     --training-measure-runs "$TRAINING_MEASURE_RUNS" \
     --executor "$EXECUTOR" \
-    --docker-image "$DOCKER_IMAGE"
+    --docker-image "$DOCKER_IMAGE" \
+    "${COMPARE_EXTRA_ARGS[@]}"
 fi
 
 echo "Benchmark outputs:"

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.util.Objects;
+import java.util.Comparator;
 import java.util.stream.Stream;
 
 public final class HadoopSupport {
@@ -78,6 +79,45 @@ public final class HadoopSupport {
         Files.createDirectories(localPath.getParent());
         try (FileSystem fileSystem = FileSystem.get(configuration())) {
             fileSystem.copyToLocalFile(false, new Path(normalize(hdfsPath)), new Path(localPath.toAbsolutePath().toString()), true);
+        }
+    }
+
+    public java.nio.file.Path localizeInput(String hdfsPath, java.nio.file.Path localRoot) throws Exception {
+        try (FileSystem fileSystem = FileSystem.get(configuration())) {
+            Path source = new Path(normalize(hdfsPath));
+            String fileName = source.getName();
+            if (fileName == null || fileName.isBlank()) {
+                fileName = "input";
+            }
+            if (fileName.endsWith(".manifest.tsv")) {
+                Files.createDirectories(localRoot);
+                Path sourceDirectory = source.getParent();
+                if (sourceDirectory == null) {
+                    throw new IOException("Manifest input is missing a parent directory: " + hdfsPath);
+                }
+                copyDirectoryFromHdfs(fileSystem, sourceDirectory, localRoot);
+                return localRoot.resolve(fileName);
+            }
+            java.nio.file.Path localPath = localRoot.resolve(fileName);
+            Files.createDirectories(localPath.getParent());
+            fileSystem.copyToLocalFile(false, source, new Path(localPath.toAbsolutePath().toString()), true);
+            return localPath;
+        }
+    }
+
+    public void copyLocalDirectoryToHdfs(java.nio.file.Path localDirectory, String hdfsDirectory) throws Exception {
+        try (FileSystem fileSystem = FileSystem.get(configuration())) {
+            Path destinationRoot = new Path(normalize(hdfsDirectory));
+            fileSystem.delete(destinationRoot, true);
+            copyDirectoryToHdfs(fileSystem, localDirectory, destinationRoot);
+        }
+    }
+
+    public void copyHdfsDirectoryToLocal(String hdfsDirectory, java.nio.file.Path localDirectory) throws Exception {
+        deleteLocalRecursively(localDirectory);
+        Files.createDirectories(localDirectory);
+        try (FileSystem fileSystem = FileSystem.get(configuration())) {
+            copyDirectoryFromHdfs(fileSystem, new Path(normalize(hdfsDirectory)), localDirectory);
         }
     }
 
@@ -224,6 +264,59 @@ public final class HadoopSupport {
 
     private static String toUnixPath(java.nio.file.Path relative) {
         return relative.toString().replace('\\', '/');
+    }
+
+    private static void copyDirectoryFromHdfs(
+            FileSystem fileSystem,
+            Path sourceDirectory,
+            java.nio.file.Path localDirectory) throws IOException {
+        for (FileStatus status : fileSystem.listStatus(sourceDirectory)) {
+            java.nio.file.Path destination = localDirectory.resolve(status.getPath().getName());
+            if (status.isDirectory()) {
+                Files.createDirectories(destination);
+                copyDirectoryFromHdfs(fileSystem, status.getPath(), destination);
+            } else {
+                Files.createDirectories(destination.getParent());
+                fileSystem.copyToLocalFile(false, status.getPath(), new Path(destination.toAbsolutePath().toString()), true);
+            }
+        }
+    }
+
+    private static void copyDirectoryToHdfs(
+            FileSystem fileSystem,
+            java.nio.file.Path localDirectory,
+            Path hdfsDirectory) throws IOException {
+        try (Stream<java.nio.file.Path> stream = Files.walk(localDirectory)) {
+            for (java.nio.file.Path candidate : stream.sorted().toList()) {
+                java.nio.file.Path relative = localDirectory.relativize(candidate);
+                Path destination = relative.toString().isBlank()
+                        ? hdfsDirectory
+                        : new Path(hdfsDirectory, relative.toString().replace('\\', '/'));
+                if (Files.isDirectory(candidate)) {
+                    fileSystem.mkdirs(destination);
+                } else {
+                    Path parent = destination.getParent();
+                    if (parent != null) {
+                        fileSystem.mkdirs(parent);
+                    }
+                    fileSystem.copyFromLocalFile(false, true, new Path(candidate.toAbsolutePath().toString()), destination);
+                }
+            }
+        }
+    }
+
+    private static void deleteLocalRecursively(java.nio.file.Path path) throws IOException {
+        if (path == null || !Files.exists(path)) {
+            return;
+        }
+        try (Stream<java.nio.file.Path> stream = Files.walk(path)) {
+            stream.sorted(Comparator.reverseOrder()).forEach(candidate -> {
+                try {
+                    Files.deleteIfExists(candidate);
+                } catch (IOException ignored) {
+                }
+            });
+        }
     }
 
     private static String normalizePath(String value) {

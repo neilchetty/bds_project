@@ -1,6 +1,7 @@
 package org.gene2life.execution;
 
 import org.gene2life.hadoop.HadoopJobRunner;
+import org.gene2life.hadoop.HdfsDockerJobRunner;
 import org.gene2life.model.ClusterProfile;
 import org.gene2life.model.JobDefinition;
 import org.gene2life.model.JobRun;
@@ -31,6 +32,7 @@ public final class WorkflowExecutor {
     private final ExecutionMode executionMode;
     private final DockerNodePool dockerNodePool;
     private final HadoopJobRunner hadoopJobRunner;
+    private final HdfsDockerJobRunner hdfsDockerJobRunner;
     private final String hdfsRunRoot;
 
     public WorkflowExecutor(
@@ -40,6 +42,7 @@ public final class WorkflowExecutor {
             ExecutionMode executionMode,
             DockerNodePool dockerNodePool,
             HadoopJobRunner hadoopJobRunner,
+            HdfsDockerJobRunner hdfsDockerJobRunner,
             String hdfsRunRoot) {
         this.workflowSpec = workflowSpec;
         this.workflow = workflowSpec.definition();
@@ -47,6 +50,7 @@ public final class WorkflowExecutor {
         this.executionMode = executionMode;
         this.dockerNodePool = dockerNodePool;
         this.hadoopJobRunner = hadoopJobRunner;
+        this.hdfsDockerJobRunner = hdfsDockerJobRunner;
         this.hdfsRunRoot = hdfsRunRoot;
         this.runtimes = new HashMap<>();
         for (ClusterProfile cluster : clusters) {
@@ -141,6 +145,17 @@ public final class WorkflowExecutor {
                     throw new IllegalStateException("Hadoop executor selected without Hadoop job runner");
                 }
                 yield hadoopJobRunner.executeWorkflowJob(
+                        workflowSpec,
+                        assignment.jobId(),
+                        nodeProfile,
+                        runRoot,
+                        hdfsRunRoot);
+            }
+            case HDFS_DOCKER -> {
+                if (hdfsDockerJobRunner == null) {
+                    throw new IllegalStateException("HDFS Docker executor selected without HDFS Docker job runner");
+                }
+                yield hdfsDockerJobRunner.executeWorkflowJob(
                         workflowSpec,
                         assignment.jobId(),
                         nodeProfile,

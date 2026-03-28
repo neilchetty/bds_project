@@ -55,6 +55,10 @@ public final class CliArguments {
         return Boolean.parseBoolean(options.getOrDefault(key, Boolean.toString(defaultValue)));
     }
 
+    public Map<String, String> options() {
+        return options;
+    }
+
     public List<String> positionals() {
         return positionals;
     }

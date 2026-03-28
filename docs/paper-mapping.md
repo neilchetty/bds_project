@@ -40,6 +40,8 @@ Code mapping used here:
 - `autodock-001 ... autodock-100`
 
 This preserves the paper's 104-job scale while keeping the data products small.
+The default implementation now uses all `100` `autodock` branches.
+For faster turnaround on one server, you can still reduce the fanout explicitly with `--avianflu-autodock-count <n>`.
 
 ### `epigenomics`
 
@@ -61,6 +63,8 @@ Code mapping used here:
 - `pileup`
 
 This preserves the paper's 100-job scale.
+The default implementation now uses all `24` split branches.
+For faster turnaround on one server, you can still reduce the fanout explicitly with `--epigenomics-split-count <n>`.
 
 ## Scheduling Mapping
 
@@ -75,7 +79,8 @@ This preserves the paper's 100-job scale.
 - training tasks run on the first node of each cluster
 - cluster ordering is derived from measured training runtimes
 - near-equal runtimes are classified as more IO-oriented
-- node expansion follows the paper's cluster-by-cluster idea
+- node expansion follows the paper's cluster-prefix idea:
+  previously activated nodes remain candidates, and only the next unused node from the highest-ranked unfinished cluster is introduced at each expansion step
 
 The implementation stabilizes training with warmup runs plus repeated measured runs and uses the median observed duration per cluster/job profile.
 

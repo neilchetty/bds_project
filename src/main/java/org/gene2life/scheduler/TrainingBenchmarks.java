@@ -52,22 +52,23 @@ public final class TrainingBenchmarks {
         if (!hasMeasurements(job)) {
             return staticClusterOrder(job, clusters);
         }
-        String classification = classification(job);
         return clusters.stream()
                 .sorted((left, right) -> {
+                    String classification = classification(job);
                     long leftDuration = duration(job, left.clusterId());
                     long rightDuration = duration(job, right.clusterId());
                     if (effectivelyEqual(leftDuration, rightDuration, classification)) {
-                        if ("io".equals(classification)) {
-                            return Integer.compare(left.maxCpuThreads(), right.maxCpuThreads());
-                        }
-                        return Integer.compare(right.maxCpuThreads(), left.maxCpuThreads());
+                        return compareByModeledPreference(job, left, right);
                     }
                     int compare = Long.compare(leftDuration, rightDuration);
                     if (compare != 0) {
                         return compare;
                     }
-                    return Integer.compare(left.clusterId().hashCode(), right.clusterId().hashCode());
+                    int modeledCompare = compareByModeledPreference(job, left, right);
+                    if (modeledCompare != 0) {
+                        return modeledCompare;
+                    }
+                    return left.clusterId().compareTo(right.clusterId());
                 })
                 .map(ClusterProfile::clusterId)
                 .toList();
@@ -75,20 +76,29 @@ public final class TrainingBenchmarks {
 
     private List<String> staticClusterOrder(JobDefinition job, List<ClusterProfile> clusters) {
         return clusters.stream()
-                .sorted((left, right) -> {
-                    if ("io".equals(job.taskType().defaultClassification())) {
-                        return Integer.compare(left.maxCpuThreads(), right.maxCpuThreads());
-                    }
-                    return Integer.compare(right.maxCpuThreads(), left.maxCpuThreads());
-                })
+                .sorted((left, right) -> compareByModeledPreference(job, left, right))
                 .map(ClusterProfile::clusterId)
                 .toList();
     }
 
+    private int compareByModeledPreference(JobDefinition job, ClusterProfile left, ClusterProfile right) {
+        long leftEstimate = DurationModel.estimateDuration(job, left.firstNode());
+        long rightEstimate = DurationModel.estimateDuration(job, right.firstNode());
+        int compare = Long.compare(leftEstimate, rightEstimate);
+        if (compare != 0) {
+            return compare;
+        }
+        compare = Integer.compare(right.maxCpuThreads(), left.maxCpuThreads());
+        if (compare != 0) {
+            return compare;
+        }
+        return left.clusterId().compareTo(right.clusterId());
+    }
+
     private boolean effectivelyEqual(long leftDuration, long rightDuration, String classification) {
         long minimum = Math.max(1L, Math.min(leftDuration, rightDuration));
-        double threshold = "io".equals(classification) ? 0.25 : 0.15;
-        return Math.abs(leftDuration - rightDuration) <= Math.max(25L, Math.round(minimum * threshold));
+        double threshold = "io".equals(classification) ? 0.25 : 0.25;
+        return Math.abs(leftDuration - rightDuration) <= Math.max(50L, Math.round(minimum * threshold));
     }
 
     public static TrainingBenchmarks empty() {

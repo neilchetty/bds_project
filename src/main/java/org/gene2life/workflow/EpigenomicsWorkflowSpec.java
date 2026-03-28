@@ -19,20 +19,29 @@ import java.util.Random;
 import java.util.concurrent.Future;
 
 public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
-    private static final int DEFAULT_SPLIT_COUNT = 24;
-    private static final WorkflowDefinition DEFINITION = buildDefinition(DEFAULT_SPLIT_COUNT);
+    public static final int DEFAULT_SPLIT_COUNT = 24;
     private static final char[] DNA = {'A', 'C', 'G', 'T'};
+    private final int splitCount;
+    private final WorkflowDefinition definition;
+
+    public EpigenomicsWorkflowSpec() {
+        this(DEFAULT_SPLIT_COUNT);
+    }
+
+    public EpigenomicsWorkflowSpec(int splitCount) {
+        this.splitCount = Math.max(1, splitCount);
+        this.definition = buildDefinition(this.splitCount);
+    }
 
     @Override
     public WorkflowDefinition definition() {
-        return DEFINITION;
+        return definition;
     }
 
     @Override
     public void generateData(Path dataRoot, CliArguments cli) throws Exception {
         Files.createDirectories(dataRoot.resolve("training"));
         Random random = new Random(Long.parseLong(cli.option("seed", "42")));
-        int splitCount = splitCount();
         int readsPerSplit = cli.optionInt("reads-per-split", 192);
         int readLength = cli.optionInt("read-length", 80);
         int referenceRecords = cli.optionInt("reference-record-count", 640);
@@ -89,7 +98,10 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
     public TaskInputs resolveTrainingInputs(String jobId, Path dataRoot) {
         Path outputDirectory = dataRoot.resolve("training/generated").resolve(jobId);
         if (jobId.equals("fastqSplit")) {
-            return new TaskInputs(List.of(dataRoot.resolve("training/raw.fastq")), outputDirectory, Map.of("chunk_count", "4"));
+            return new TaskInputs(
+                    List.of(dataRoot.resolve("training/raw.fastq")),
+                    outputDirectory,
+                    Map.of("chunk_count", Integer.toString(trainingSplitCount())));
         }
         if (jobId.equals("filterContams-001")) {
             return new TaskInputs(List.of(trainingOutputPath(dataRoot, "fastqSplit"), dataRoot.resolve("training/contaminants.tsv")),
@@ -105,11 +117,11 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
             return new TaskInputs(List.of(trainingOutputPath(dataRoot, "fastq2bfq-001"), dataRoot.resolve("training/reference.fasta")), outputDirectory, Map.of());
         }
         if (jobId.equals("mapMerge")) {
-            return new TaskInputs(List.of(
-                    trainingOutputPath(dataRoot, "map-001"),
-                    trainingOutputPath(dataRoot, "map-001"),
-                    trainingOutputPath(dataRoot, "map-001"),
-                    trainingOutputPath(dataRoot, "map-001")), outputDirectory, Map.of());
+            List<Path> inputs = new ArrayList<>();
+            for (int index = 0; index < trainingSplitCount(); index++) {
+                inputs.add(trainingOutputPath(dataRoot, "map-001"));
+            }
+            return new TaskInputs(inputs, outputDirectory, Map.of());
         }
         if (jobId.equals("maqIndex")) {
             return new TaskInputs(List.of(trainingOutputPath(dataRoot, "mapMerge")), outputDirectory, Map.of());
@@ -189,7 +201,7 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
             return new HadoopTaskInputs(
                     List.of(normalizeHdfsPath(dataRoot) + "/training/raw.fastq"),
                     outputDirectory,
-                    Map.of("chunk_count", "4"));
+                    Map.of("chunk_count", Integer.toString(trainingSplitCount())));
         }
         if (jobId.equals("filterContams-001")) {
             return new HadoopTaskInputs(
@@ -214,14 +226,11 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
                     Map.of());
         }
         if (jobId.equals("mapMerge")) {
-            return new HadoopTaskInputs(
-                    List.of(
-                            hadoopTrainingOutputPath(dataRoot, "map-001"),
-                            hadoopTrainingOutputPath(dataRoot, "map-001"),
-                            hadoopTrainingOutputPath(dataRoot, "map-001"),
-                            hadoopTrainingOutputPath(dataRoot, "map-001")),
-                    outputDirectory,
-                    Map.of());
+            List<String> inputs = new ArrayList<>();
+            for (int index = 0; index < trainingSplitCount(); index++) {
+                inputs.add(hadoopTrainingOutputPath(dataRoot, "map-001"));
+            }
+            return new HadoopTaskInputs(inputs, outputDirectory, Map.of());
         }
         if (jobId.equals("maqIndex")) {
             return new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "mapMerge")), outputDirectory, Map.of());
@@ -327,8 +336,17 @@ public final class EpigenomicsWorkflowSpec implements WorkflowSpec {
         return jobId.substring(jobId.indexOf('-') + 1);
     }
 
+    @Override
+    public Map<String, String> variantOptions() {
+        return Map.of("epigenomics-split-count", Integer.toString(splitCount));
+    }
+
+    private int trainingSplitCount() {
+        return Math.min(4, splitCount);
+    }
+
     private int splitCount() {
-        return (int) DEFINITION.jobs().stream().filter(job -> job.taskType() == TaskType.MAP).count();
+        return splitCount;
     }
 
     private static String pad(int value) {

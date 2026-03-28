@@ -22,11 +22,11 @@ public final class Gene2LifeWorkflowSpec implements WorkflowSpec {
             List.of(
                     new JobDefinition("blast1", "Blast 1", List.of(), TaskType.BLAST, 62_000L, "blast1",
                             "source DNA sequence", "0.1 MB blast hits", Map.of()),
-                    new JobDefinition("blast2", "Blast 2", List.of(), TaskType.BLAST, 62_000L, "blast2",
+                    new JobDefinition("blast2", "Blast 2", List.of(), TaskType.BLAST, 62_000L, "blast1",
                             "source DNA sequence", "0.1 MB blast hits", Map.of()),
                     new JobDefinition("clustalw1", "ClustalW 1", List.of("blast1"), TaskType.CLUSTAL, 90_000L, "clustalw1",
                             "blast1 hits", "0.1 MB alignment", Map.of()),
-                    new JobDefinition("clustalw2", "ClustalW 2", List.of("blast2"), TaskType.CLUSTAL, 90_000L, "clustalw2",
+                    new JobDefinition("clustalw2", "ClustalW 2", List.of("blast2"), TaskType.CLUSTAL, 90_000L, "clustalw1",
                             "blast2 hits", "0.1 MB alignment", Map.of()),
                     new JobDefinition("dnapars", "Dnapars", List.of("clustalw1"), TaskType.DNAPARS, 19_000L, "dnapars",
                             "clustalw1 alignment", "4 KB DNA tree", Map.of()),
@@ -34,7 +34,7 @@ public final class Gene2LifeWorkflowSpec implements WorkflowSpec {
                             "clustalw2 alignment", "4 KB protein tree", Map.of()),
                     new JobDefinition("drawgram1", "Drawgram 1", List.of("dnapars"), TaskType.DRAWGRAM, 18_000L, "drawgram1",
                             "dnapars tree", "35 KB tree files", Map.of()),
-                    new JobDefinition("drawgram2", "Drawgram 2", List.of("protpars"), TaskType.DRAWGRAM, 18_000L, "drawgram2",
+                    new JobDefinition("drawgram2", "Drawgram 2", List.of("protpars"), TaskType.DRAWGRAM, 18_000L, "drawgram1",
                             "protpars tree", "35 KB tree files", Map.of())));
 
     @Override
@@ -51,7 +51,7 @@ public final class Gene2LifeWorkflowSpec implements WorkflowSpec {
                 cli.optionInt("query-count", 128),
                 cli.optionInt("reference-records-per-shard", 40_000),
                 cli.optionInt("sequence-length", 240),
-                cli.optionInt("training-fraction-percent", 2));
+                cli.optionInt("training-fraction-percent", 25));
     }
 
     @Override
@@ -82,9 +82,9 @@ public final class Gene2LifeWorkflowSpec implements WorkflowSpec {
                     dataRoot.resolve("training/query-sample.fasta"),
                     dataRoot.resolve("training/reference-b-sample.fasta")), outputDirectory, Map.of());
             case "clustalw1" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "blast1")), outputDirectory, Map.of());
-            case "clustalw2" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "blast2")), outputDirectory, Map.of());
+            case "clustalw2" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "blast1")), outputDirectory, Map.of());
             case "dnapars" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "clustalw1")), outputDirectory, Map.of());
-            case "protpars" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "clustalw2")), outputDirectory, Map.of());
+            case "protpars" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "clustalw1")), outputDirectory, Map.of());
             case "drawgram1" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "dnapars")), outputDirectory, Map.of());
             case "drawgram2" -> new TaskInputs(List.of(trainingOutputPath(dataRoot, "protpars")), outputDirectory, Map.of());
             default -> throw new IllegalArgumentException("Unknown gene2life training job: " + jobId);
@@ -148,9 +148,9 @@ public final class Gene2LifeWorkflowSpec implements WorkflowSpec {
                     outputDirectory,
                     Map.of());
             case "clustalw1" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "blast1")), outputDirectory, Map.of());
-            case "clustalw2" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "blast2")), outputDirectory, Map.of());
+            case "clustalw2" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "blast1")), outputDirectory, Map.of());
             case "dnapars" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "clustalw1")), outputDirectory, Map.of());
-            case "protpars" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "clustalw2")), outputDirectory, Map.of());
+            case "protpars" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "clustalw1")), outputDirectory, Map.of());
             case "drawgram1" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "dnapars")), outputDirectory, Map.of());
             case "drawgram2" -> new HadoopTaskInputs(List.of(hadoopTrainingOutputPath(dataRoot, "protpars")), outputDirectory, Map.of());
             default -> throw new IllegalArgumentException("Unknown gene2life training job: " + jobId);

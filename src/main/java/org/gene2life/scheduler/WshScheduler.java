@@ -70,13 +70,12 @@ public final class WshScheduler implements Scheduler {
         for (String clusterId : sortedClusterIds) {
             ClusterProfile cluster = clusters.stream().filter(item -> item.clusterId().equals(clusterId)).findFirst().orElseThrow();
             int activated = activatedNodesPerCluster.getOrDefault(clusterId, 0);
-            if (activated >= cluster.nodes().size()) {
-                candidates.addAll(cluster.nodes());
-                continue;
+            int activeCount = Math.min(activated, cluster.nodes().size());
+            candidates.addAll(cluster.nodes().subList(0, activeCount));
+            if (activeCount < cluster.nodes().size()) {
+                candidates.add(cluster.nodes().get(activeCount));
+                break;
             }
-            candidates.addAll(cluster.nodes().subList(0, activated));
-            candidates.add(cluster.nodes().get(activated));
-            break;
         }
         if (candidates.isEmpty()) {
             return clusters.stream().flatMap(cluster -> cluster.nodes().stream()).toList();

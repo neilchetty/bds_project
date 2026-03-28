@@ -45,6 +45,10 @@ public interface WorkflowSpec {
         return definition().displayName();
     }
 
+    default Map<String, String> variantOptions() {
+        return Map.of();
+    }
+
     default Path outputPath(String jobId, Path outputDirectory) {
         return outputDirectory.resolve(definition().job(jobId).taskType().outputFileName());
     }
